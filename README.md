@@ -3,25 +3,27 @@
 [![IIT Guwahati Hackathon](https://img.shields.io/badge/IIT%20Guwahati-PlayHack%202026-blue.svg)](https://unstop.com/competitions/playhack-ml-track-iit-guwahati-1739468)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
 [![Bayes Ceiling Closed](https://img.shields.io/badge/Bayes%20Ceiling%20Closed-99.7%25-gold.svg)](#-why-077-auc-and-not-10-the-oracle-ceiling-explained)
+[![AutoGluon Benchmark](https://img.shields.io/badge/AutoGluon-SOTA%20Benchmarked-orange.svg)](#-the-ml-models--how-do-they-learn)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 > **A full end-to-end ML solution for predicting athlete injuries from wearable sensor data.**
-> Written so that anyone with basic ML knowledge can follow every decision we made — and *why* we made it.
+> Written so anyone with basic ML knowledge can follow every decision we made — and *why* we made it.
+> Built for **Round 1 of PlayHack ML Track 2026, IIT Guwahati** (Prize Pool: ₹4,00,000).
 
 ---
 
 ## 📌 Table of Contents
 
 1. [The Big Picture — What Are We Actually Doing?](#-the-big-picture--what-are-we-actually-doing)
-2. [The Dataset — What Evidence Do We Have?](#-the-dataset--what-evidence-do-we-have)
+2. [Dataset Architecture & Composition](#-dataset-architecture--composition)
 3. [The #1 Trap — Why Naive Approaches Fail (Data Leakage)](#-the-1-trap--why-naive-approaches-completely-fail)
-4. [The Key Discovery — Why Do Athletes Get Injured?](#-the-key-discovery--why-do-athletes-get-injured)
+4. [The Key Scientific Discovery — Two-Mechanism Hazard Process](#-the-key-scientific-discovery--two-mechanism-hazard-process)
 5. [What is ACWR? The Most Important Feature](#-what-is-acwr-the-most-important-feature)
-6. [Feature Engineering — Turning Sensor Data into ML Inputs](#️-feature-engineering--turning-raw-sensor-data-into-ml-inputs)
-7. [The ML Models — How Do They Learn?](#-the-ml-models--how-do-they-learn)
+6. [Feature Engineering — 223 Signals, 35 Selected](#️-feature-engineering--223-signals-35-selected)
+7. [The ML Models & Final Architecture](#-the-ml-models--final-ensemble-architecture)
 8. [Why 0.77 AUC and Not 1.0? The Oracle Ceiling Explained](#-why-077-auc-and-not-10-the-oracle-ceiling-explained)
-9. [How Scoring Works — ROC-AUC and MAE](#-how-scoring-works--roc-auc-and-mae)
-10. [The Recovery Insight — When Your Model Should Be Simple](#-the-recovery-insight--when-simple-beats-complex)
+9. [Evaluation & Metric Strategy](#-evaluation--metric-strategy)
+10. [The Recovery Insight — When Simple Beats Complex](#-the-recovery-insight--when-simple-beats-complex)
 11. [The Bimodal Threshold — Why 0.290 and Not 0.5](#-the-bimodal-threshold--why-0290-and-not-05)
 12. [Results & Final Numbers](#-results--final-numbers)
 13. [What Didn't Work (Negative Results)](#-what-didnt-work-negative-results)
@@ -32,521 +34,605 @@
 
 ## 🏀 The Big Picture — What Are We Actually Doing?
 
-Imagine you're the **coach of a professional sports team**. Every athlete on your team wears a fitness tracker (like a Fitbit or Apple Watch) during training. For **30 days**, it quietly collects everything:
+Imagine you're the **coach of a professional sports team**. Every athlete wears a fitness tracker during training. For **30 days**, it quietly collects everything — heart rate every hour, steps, calories, sleep quality, training sessions.
 
-- Their heart rate every single hour
-- How many steps they take each day
-- How many calories they burn
-- How long and how well they sleep
-- When they trained, how hard, and what type of training
+**The question:**
 
-**The question we're answering:**
-
-> *"Based on those 30 days of data — can we predict whether an athlete will get injured in the next 30 days? And if so, on which day will they get injured, and how long will they take to recover?"*
-
-This is exactly the competition problem. We have data on **3,000 athletes** (with the answers), and we need to predict for **1,100 new athletes** (where the answers are hidden).
+> *"Based on those 30 days of biometric data — can we predict whether an athlete will get injured in the next 30 days? If so, on which exact day? And how long will they need to recover?"*
 
 ```
-Days 1 to 30  ──────────────────→  Days 31 to 60
-[What we CAN SEE]                  [What we must PREDICT]
+                        THE PREDICTION PROBLEM
+================================================================================
 
-Heart rate logs                    ❓ Will they get injured?   (0 = No, 1 = Yes)
-Steps and calories                 ❓ On which day?            (Day 1 to 30)
-Sleep quality                      ❓ How long to recover?     (5 to 20 days)
-Training sessions
+    Observation Window (Days 1–30)          Risk Window (Days 31–60)
+    ┌──────────────────────────────┐        ┌───────────────────────────────┐
+    │  • Hourly Heart Rate         │        │  ❓ injured_in_risk_window     │
+    │  • Daily Steps & Calories    │──────▶ │     (binary: 0 or 1)          │
+    │  • Sleep Duration & Quality  │        │  ❓ onset_day_offset           │
+    │  • Training Session Logs     │        │     (integer: Day 1 to 30)    │
+    │  • Athlete Metadata          │        │  ❓ recovery_duration          │
+    └──────────────────────────────┘        │     (integer: 5 to 20 days)   │
+    [We CAN see this in both splits]        └───────────────────────────────┘
+                                            [Must PREDICT — only train has answers]
+
+================================================================================
+    Train: 3,000 athletes × 60 days    |    Test: 1,100 athletes × 30 days
+================================================================================
 ```
 
 ---
 
-## 📦 The Dataset — What Evidence Do We Have?
+## 📦 Dataset Architecture & Composition
 
-The dataset comes as **10 separate CSV files** (like Excel spreadsheets), each containing a different type of sensor reading. Think of it like a hospital's patient records, but for athletes.
+The dataset is **10 relational CSV tables**, each capturing a different modality of athlete data. Think of it like a hospital's patient records, but for sports performance.
 
-| File | What It Contains (Plain English) |
-|---|---|
-| `athlete_metadata.csv` | The athlete's "ID card" — sport, age, gender, height, weight, how many past injuries they've had, years of experience |
-| `dailyActivity_merged.csv` | How active were they each day? (total steps, calories burned, very active / fairly active / sedentary minutes) |
-| `hourlyHeartrate_merged.csv` | Heart rate measured every single hour for 30 days. Also their resting heart rate (measured at night, 00:00–05:00 when they're sleeping) |
-| `hourlySteps_merged.csv` | How many steps did they take each hour? |
-| `hourlyCalories_merged.csv` | How many calories did they burn each hour? |
-| `hourlyIntensities_merged.csv` | Workout intensity each hour |
-| `sleepDay_merged.csv` | How many minutes they slept, how long they were in bed, sleep efficiency (time asleep ÷ time in bed) |
-| `training_sessions.csv` | Every training session logged — what sport type, what time they started, how many hours they trained, consecutive days without rest |
-| `weightLogInfo_merged.csv` | Their BMI and weight measurements |
-| `train_labels.csv` | The **answers** (only in training data) — did they get injured? On what day? How many days to recover? |
+| File | Granularity | Key Fields | Size |
+|---|---|---|---|
+| `athlete_metadata.csv` | Per athlete | Sport, Gender, Age, Height, Weight, Prior Injuries, Years Playing | ~180 KB |
+| `dailyActivity_merged.csv` | Daily | Total Steps, Calories, Very/Fairly/Lightly Active Minutes, Sedentary Minutes | ~9 MB |
+| `hourlyHeartrate_merged.csv` | Hourly | Avg HR, Min HR, Max HR | **145 MB** |
+| `hourlySteps_merged.csv` | Hourly | Step Total per Hour | **124 MB** |
+| `hourlyCalories_merged.csv` | Hourly | Calorie Burn per Hour | **123 MB** |
+| `hourlyIntensities_merged.csv` | Hourly | Total Intensity per Hour | **137 MB** |
+| `sleepDay_merged.csv` | Daily | Minutes Asleep, Time in Bed, Sleep Efficiency | ~5 MB |
+| `training_sessions.csv` | Per session | Session Type, Start/End Hour, Sport Category | ~4 MB |
+| `weightLogInfo_merged.csv` | Periodic | Weight (kg), BMI, Body Fat % | ~250 KB |
+| `train_labels.csv` | Per athlete | injured_in_risk_window, onset_day_offset, recovery_duration | ~32 KB |
 
-**Scale of the data:**
-- 3,000 athletes in training set × 60 days × hourly readings = **hundreds of millions of rows**
-- Raw CSV files total approximately **660 MB** just for training data
+**Scale:** 3,000 athletes × 60 days × hourly readings = hundreds of millions of data points (~660 MB raw CSV for train alone).
 
 ---
 
 ## 🚨 The #1 Trap — Why Naive Approaches Completely Fail
 
-This is the most critical thing to understand about this competition. **Most teams will fall into this trap.**
+This is the single most important thing to understand about this competition. **Most teams will fall into this trap without realising it.**
 
 ### The Setup
-- `data/train/` — Contains **60 days** of wearable data (January 5 to March 5, 2026)
-- `data/test/` — Contains **only 30 days** of wearable data (January 5 to February 3, 2026)
-
-### Why is This a Problem?
-
-The labels tell us whether an athlete gets injured during **Days 31–60**. Those days are literally *the future we're predicting*.
-
-Now here's the trap: **the train data also contains Days 31–60**. If you naively calculate "average heart rate over all 60 training days," your model will be secretly reading the injury period while learning. It might learn:
-
-> *"Oh, this athlete's daily steps dropped to near zero starting on Day 35... that's because they were injured and couldn't walk!"*
-
-That sounds smart — but it's **cheating**. The test set has no data past Day 30. On the test set, your model looks for something that doesn't exist, and the score collapses.
 
 ```
-❌ WRONG (Data Leakage):
-   feature = average_steps(all 60 days of train)
-   → CV score looks like 0.99 AUC
-   → Real test score: 0.52 AUC (barely better than random!)
+data/train/  →  60 days of wearable data  (2026-01-05 to 2026-03-05)
+data/test/   →  30 days of wearable data  (2026-01-05 to 2026-02-03)
+```
 
-✅ CORRECT (Leak-Safe):
-   feature = average_steps(only Days 1–30)
-   → CV score: ~0.76 AUC
-   → Real test score: ~0.77 AUC (matches expectation!)
+### The Trap in Plain English
+
+The labels say whether an athlete gets injured during **Days 31–60**. Those days are literally the future being predicted. But **the training CSV also contains Days 31–60**. If you naively calculate "average steps over all 60 training days," your model secretly reads the injury period:
+
+> *"This athlete's steps dropped to near zero on Day 35. That's because they were injured and couldn't walk!"*
+
+That sounds clever — but it's **cheating**. The test set has no data past Day 30. On real test data your model looks for something that doesn't exist:
+
+```
+❌ WRONG — Data Leakage:
+   feature = avg_steps(all 60 days)
+   → CV score:        0.99 AUC  (memorizing the future!)
+   → Real test score: 0.52 AUC  (barely above random)
+
+✅ CORRECT — Leak-Safe:
+   feature = avg_steps(Days 1–30 only)
+   → CV score:        0.76 AUC  (honest estimate)
+   → Real test score: 0.77 AUC  (matches expectation ✓)
 ```
 
 ### Our Solution
 
-Every single feature calculation in [`src/features.py`](src/features.py) is **hard-capped at Day 30** using:
+Every feature in [`src/features.py`](src/features.py) is hard-capped:
 
 ```python
 OBS_START = pd.Timestamp("2026-01-05")
-OBS_END   = pd.Timestamp("2026-02-03")  # Day 30, never beyond this
+OBS_END   = pd.Timestamp("2026-02-03")   # Day 30 — hard wall, never cross this
 ```
 
-We also built an automated test — `assert_no_leakage()` — that runs before every model training and will loudly crash the program if any data source accidentally leaks past Day 30.
+We also built `assert_no_leakage()` — an automated guard that runs before every training run and crashes loudly if any data source leaks past Day 30. This is verified for all 4 time-stamped tables at build time.
 
 ---
 
-## 🧬 The Key Discovery — Why Do Athletes Get Injured?
+## 🧬 The Key Scientific Discovery — Two-Mechanism Hazard Process
 
-When we plotted injury rates against training workload patterns, something very clear emerged.
-
-**Injuries don't happen randomly.** There are two completely different biological mechanisms at play:
-
-### ⚡ Mechanism 1: "Overload Hazard" (The Predictable One)
-
-Some athletes spike their training intensity dramatically in a short period. Their body hasn't had time to adapt, and biological breakdown is nearly guaranteed.
+When we plotted injury rates against training workload, something striking emerged. **Injuries don't follow a single pattern** — there are two completely separate biological mechanisms operating simultaneously.
 
 ```
-ACWR > 1.13  →  Injury rate: ~94% to 100%
-               Injury happens: Day 1–5 (almost immediately!)
+                    INJURY HAZARD BY WORKLOAD DECILE
+================================================================================
+  ACWR Decile   │  Injury Rate  │  Mean Onset Day  │  Mechanism
+  ──────────────┼───────────────┼──────────────────┼───────────────────────────
+  Deciles 1–8   │   16% – 29%  │   ~Day 21.9      │  Background hazard
+  (Normal Load) │              │   (late, random) │  (noise — irreducible)
+  ──────────────┼───────────────┼──────────────────┼───────────────────────────
+  Decile 9      │     70%      │    Day 12.4      │  Transition zone
+  (Elevated)    │              │   (mid-window)   │  (overload emerging)
+  ──────────────┼───────────────┼──────────────────┼───────────────────────────
+  Decile 10     │    100%      │     Day 5.0      │  Overload hazard
+  (Danger Zone) │              │  (IMMEDIATE!)    │  (deterministic)
+================================================================================
 ```
 
-This is **completely predictable from wearable data**. The sensors clearly show the overload spike.
+### ⚡ Mechanism 1 — Overload Hazard (Predictable)
 
-### 🎲 Mechanism 2: "Background Hazard" (The Random One)
+Athletes who spike their training intensity faster than their body can adapt:
+- ACWR > 1.13 → injury rate jumps to **94%–100%**
+- Onset is *early and tightly determined* (correlation with ACWR: **r = −0.92**, residual std = 1.5 days)
+- **Completely predictable from wearable data**
 
-Even athletes with perfectly balanced, sustainable training still get injured at a ~20% rate. These are:
-- Contact injuries (someone collides with them)
-- Bad landings
-- Pure biological bad luck
+### 🎲 Mechanism 2 — Background Hazard (Irreducible Noise)
 
-```
-ACWR ≤ 1.10  →  Injury rate: ~16% to 29%
-               Injury happens: Day 15–25 (late, scattered, random)
-```
-
-No amount of wearable data can predict these. They're irreducible noise.
-
-### The Full Picture
-
-| ACWR Decile | Training Intensity | Injury Rate | When They Get Injured |
-|---|---|---|---|
-| Deciles 1–8 (Normal) | Balanced load | 16% – 29% | ~Day 22 (random, late) |
-| Decile 9 (High) | Elevated ramp | **70%** | Day 12 (mid-window) |
-| Decile 10 (Danger) | Severe overload | **100%** | Day 5 (immediate!) |
+Even athletes with perfectly balanced loads have a ~20% base injury rate:
+- Contact injuries, bad landings, genetic bad luck
+- These occur late (mean Day 21.9) and are scattered randomly
+- **No wearable signal can predict these** — they are irreducible noise
 
 ### Why This Matters for Modeling
 
-`injured_in_risk_window` and `onset_day_offset` aren't actually two separate problems — they're **two views of the same underlying time-to-injury event**. If we call the day of injury $T$:
+`injured_in_risk_window` and `onset_day_offset` are not two separate problems — they're two projections of a single latent time-to-injury variable $T$:
 
-- `injured_in_risk_window = 1` simply means $T$ happened within 30 days
-- `onset_day_offset` is the exact value of $T$
+```
+injured_in_risk_window = I(T ≤ 30)    ← binary: did it happen in the window?
+onset_day_offset       = T            ← continuous: exactly when?
+```
 
-This is why the same set of features works well for both prediction heads.
+This is why the **same 35 features drive all three prediction heads**, and why an AFT survival model is theoretically motivated (though it failed in practice — see [Negative Results](#-what-didnt-work-negative-results)).
 
 ---
 
 ## 📐 What is ACWR? The Most Important Feature
 
-**ACWR = Acute:Chronic Workload Ratio** is the single most important metric in sports science for injury prediction.
+**ACWR = Acute:Chronic Workload Ratio** — the gold-standard metric in sports science for quantifying injury risk from training load spikes. It answers: *"How does my recent training compare to what my body is used to?"*
 
 ### Simple Analogy
 
-Imagine you normally run **5 km per day** (your chronic, long-term average). Now suddenly, you decide to run **10 km per day** for a week (your acute, recent load).
-
-- Your ratio = 10 ÷ 5 = **2.0**
-- Your body hasn't had time to adapt to this sudden doubling
-- Injury is almost certain
-
-The formula is:
+Imagine you normally run **5 km per day** (your chronic / long-term baseline). Suddenly you run **10 km per day** for a week (your acute / recent load):
 
 ```
-ACWR = (Average daily load over last 7 days)
-       ÷
-       (Average daily load over prior 23 days)
+ACWR = (Average daily load, last 7 days)
+       ──────────────────────────────────
+       (Average daily load, prior 23 days)
 
-ACWR ≈ 1.0  →  Training sustainably  →  Low injury risk
-ACWR ≈ 1.1  →  Slight overreach      →  Elevated risk
-ACWR > 1.13 →  DANGER ZONE           →  ~94–100% injury rate
+     = 10 ÷ 5 = 2.0   ← your body hasn't adapted; injury almost certain
 ```
 
-We calculate ACWR not just for steps, but for **every signal**:
-- `steps_acwr` — step count workload ratio
-- `hr_acwr` — heart rate workload ratio
-- `cal_acwr` — calorie burn workload ratio
-- `intens_acwr` — intensity workload ratio
-- `load_acwr` — combined training load ratio
+```
+ACWR ≈ 0.8   →  Under-training (detrained, loss of fitness)
+ACWR ≈ 1.0   →  Training sustainably  →  Low risk
+ACWR ≈ 1.1   →  Slight overreach      →  Elevated risk
+ACWR > 1.13  →  DANGER ZONE           →  94–100% injury rate
+ACWR > 1.5   →  Severe spike          →  Injury within ~5 days
+```
 
-All of these ACWR variants correlate with each other at **r ≈ 0.99** — they're essentially measuring the same underlying "overload signal" through different instruments.
+### Why We Have Many ACWR Variants
+
+We compute ACWR across every available signal:
+
+| Feature | Signal Measured |
+|---|---|
+| `steps_acwr` | Step count workload ratio |
+| `hr_acwr` | Cardiovascular stress ratio |
+| `cal_acwr` | Metabolic burn ratio |
+| `intens_acwr` | Training intensity ratio |
+| `load_acwr` | Composite weighted load ratio |
+
+**Crucially:** all these variants correlate with each other at **r ≈ 0.99** — they measure the same underlying latent "overload signal" through different instruments. This redundancy is why selecting 35 features beats using all 223 (see Feature Engineering below).
 
 ---
 
-## 🛠️ Feature Engineering — Turning Raw Sensor Data into ML Inputs
+## 🛠️ Feature Engineering — 223 Signals, 35 Selected
 
-Raw data is just millions of rows of numbers. A machine learning model can't understand "this person had a stressful Monday." We need to **summarize those 30 days into a single meaningful profile per athlete** — this process is called Feature Engineering.
+Raw data is millions of rows of timestamps and numbers. ML models need a single row per athlete summarising their 30-day profile. We extract **223 features** across 5 domains.
 
-Think of it like a doctor writing up a patient report:
+### The Athlete Profile (What Each Feature Row Looks Like)
 
 ```
 ATHLETE #1234 — 30-Day Sensor Summary
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WORKLOAD SIGNALS
-  Steps ACWR:             1.18  ⚠️  (above danger threshold of 1.13!)
-  Calorie Monotony:       2.30     (very repetitive training — little variation)
-  Heart Rate ACWR:        1.21  🔴  (heart working much harder than baseline)
-  Training Strain Score:  487      (accumulated fatigue, very high)
-  Steps Last 7d Avg:      14,200   (vs 12,000 prior 23d — spiking)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WORKLOAD SIGNALS (sports science constructs)
+  Steps ACWR:             1.18  ⚠️  (above danger threshold 1.13!)
+  Calorie Monotony:       2.30     (repetitive load — high strain)
+  Heart Rate ACWR:        1.21  🔴  (HR load spiking vs baseline)
+  Training Strain Score:  487      (load × monotony — very high)
+  Steps Slope:           +85/day  (training is accelerating)
 
-SLEEP & RECOVERY
-  Resting Night HR:       58 bpm   (normal)
-  Sleep Debt:             14.2 hrs (chronically sleep-deprived!)
-  Nights under 7 hours:  12 / 30  (40% of nights were too short!)
-  Sleep Efficiency:       0.84     (decent quality when they do sleep)
+SLEEP & RECOVERY PROXIES
+  Resting Night HR (00–05h): 58 bpm  (normal)
+  Sleep Debt Total:          14.2 h  (chronically sleep-deprived!)
+  Nights Under 7 Hours:      12/30   (40% of nights too short)
+  HR Within-Day Dispersion:  18 bpm  (crude HRV surrogate)
 
 TRAINING STRUCTURE
-  Longest streak without rest:  11 days straight (no rest day!)
-  Days since last rest day:     8 days
-  Evening sessions (>7pm):      42% of sessions (training too late)
-  Session types: 70% strength, 30% cardio
+  Max Consecutive Training Days:  11 (no rest day in 11 days!)
+  Max Rest Gap:                    2 days
+  Days Since Last Session:         1
+  Late Evening Sessions (≥19h):   42% (training too late)
+  Session Type Mix:               70% strength, 30% cardio
 
-ATHLETE PROFILE
-  Sport: Basketball
-  Age × Prior Injuries:  78       (older + injury history = higher risk)
-  Experience Ratio:      0.52
-  Sport-Z Score (load):  +1.8     (training 1.8 std deviations above sport average)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATHLETE PROFILE & CONTEXT
+  BMI:                  23.4
+  Experience Ratio:     0.52  (years playing / age)
+  Injury Per Year:      0.38  (prior injury history)
+  Age × Prior Injuries: 78    (risk interaction term)
+  Steps Z-Score (sport): +1.8 (1.8 std above their sport's mean)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-We extract **223 such numbers** per athlete from the raw data. These become the inputs ("features") for our models.
+### Feature Taxonomy
 
-### The Feature Groups
+```
+                         FEATURE TAXONOMY (223 Total)
+┌─────────────────────────┬─────────────────────────┬─────────────────────────┐
+│   WORKLOAD & FATIGUE    │   SLEEP & RECOVERY      │   TRAINING STRUCTURE    │
+│   (per signal × 11)     │                         │                         │
+├─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ • ACWR (7d / 23d)       │ • Night HR (00–05h)     │ • Max training streak   │
+│ • Monotony (μ/σ)        │   resting HR proxy      │ • Longest rest gap      │
+│ • Strain (Σ × monotony) │ • HR within-day std     │ • Days since last sesh  │
+│ • Last-7 / Last-14 avg  │   (crude HRV surrogate) │ • Late session fraction │
+│ • Full-window slope     │ • Sleep debt (hrs)      │ • Session type counts   │
+│ • CV (σ/μ)              │ • Frac nights < 7h      │ • Start-hour variability│
+│ • Peak day value        │ • Sleep efficiency trend│ • Max sessions per day  │
+└─────────────────────────┴─────────────────────────┴─────────────────────────┘
+                    ┌─────────────────────────────────────┐
+                    │         ATHLETE PROFILE             │
+                    │  BMI · Experience ratio             │
+                    │  Injury-per-year · Age×injury       │
+                    │  Per-sport Z-scores of load signals │
+                    └─────────────────────────────────────┘
 
-| Category | What We Compute | Why It Matters |
+Signals: steps, calories, very-active-min, active-min, sedentary,
+         load, distance, heart-rate, resting-HR, HR-max, HR-range,
+         intensity, session-hours → each gets the full 11-stat block
+```
+
+### Why 35 Features Beat All 223 (In-Fold Selection)
+
+All ACWR variants correlate at r ≈ 0.99 with each other. Feeding all 223 into gradient boosted trees causes them to split across near-identical redundant columns → overfitting. We swept feature counts inside CV folds:
+
+| Features Used (K) | Classifier AUC | Onset MAE |
 |---|---|---|
-| **Workload** | ACWR, Monotony, Strain, Slopes, Last-7 avg | The overload signal — #1 predictor of injury |
-| **Recovery** | Resting night HR, HR dispersion (HRV proxy), Sleep debt, Short-sleep nights | How well is the body recovering between sessions? |
-| **Training Structure** | Consecutive training streaks, Rest gaps, Late-evening sessions | Is training structured safely? |
-| **Athlete Profile** | BMI, Experience, Prior injury rate, Sport-relative z-scores | Context — the same load means different things for different sports |
+| 3 | 0.7330 | 2.881 days |
+| 12 | 0.7463 | 2.683 days |
+| **35 ← Optimal** | **0.7572** | **2.649 days** |
+| 100 | 0.7522 | 2.695 days |
+| 206 (all) | 0.7497 | 2.703 days |
 
-### Why Only 35 Features Get Used (Not All 223)
-
-This is a subtle but important insight. All those ACWR variants (`steps_acwr`, `hr_acwr`, `cal_acwr`...) measure nearly the same thing. Feeding all 223 into the model causes a problem: the trees start splitting on near-identical columns, spreading their "attention" thin, and overfitting.
-
-We ran a sweep to find the optimal number:
-
-| Features Used | Injury AUC | Onset MAE |
-|---|---|---|
-| 3 features | 0.7330 | 2.881 days |
-| 12 features | 0.7463 | 2.683 days |
-| **35 features ✅** | **0.7572** | **2.649 days** |
-| 100 features | 0.7522 | 2.695 days |
-| All 206 features | 0.7497 | 2.703 days |
-
-**Using all 223 features actually performs worse than using just 35.** We select the best 35 features separately inside each cross-validation fold (so the feature selection itself is never influenced by the test fold).
+**More features actively hurts here.** We select top-K by LightGBM gain *inside each training fold* — so feature selection itself is never contaminated by the held-out fold. K = 35 / 35 / 20 for classifier / onset / recovery heads respectively.
 
 ---
 
-## 🤖 The ML Models — How Do They Learn?
+## 🤖 The ML Models — Final Ensemble Architecture
 
-### The Core Idea: Decision Trees
+### How Gradient Boosted Trees Work (Simple Version)
 
-A Decision Tree asks a series of yes/no questions about an athlete's numbers to arrive at a prediction:
-
-```
-Is ACWR > 1.13?
-├── YES: Is sleep debt > 20 hours?
-│         ├── YES → Predict: INJURED (confidence: 94%)
-│         └── NO  → Predict: INJURED (confidence: 81%)
-└── NO:  Is training streak > 10 days?
-          ├── YES → Predict: AT RISK (confidence: 41%)
-          └── NO  → Predict: LOW RISK (confidence: 18%)
-```
-
-### Gradient Boosting: Hundreds of Trees, Learning Together
-
-Gradient Boosting builds hundreds of these trees sequentially, where each new tree **learns specifically from the mistakes of all previous trees**. By the end, they vote together. This is the most powerful algorithm for tabular data (structured tables of numbers).
-
-We use three different "brands" of gradient boosting:
-
-| Model | Specialty | Our AUC |
-|---|---|---|
-| **LightGBM** | Very fast, great on large datasets | 0.7601 |
-| **XGBoost** (GPU) | Robust, widely trusted | 0.7633 |
-| **CatBoost** | Handles categorical variables (like sport, gender) natively | 0.7621 |
-
-### Why 3 Models? Blending Errors
-
-Each algorithm makes slightly *different* mistakes on slightly different athletes. Blending their predictions cancels out individual errors:
+A decision tree asks a series of yes/no questions:
 
 ```
-Athlete A:  LightGBM says 0.60  ←  slightly underconfident here
-            XGBoost says  0.78  ←  more accurate here
-            CatBoost says 0.72  ←  middle ground
-            Blended:      0.73  ←  smoother, more reliable
+Is hr_acwr > 1.13?
+├── YES: Is sleep_debt_total > 20h?
+│         ├── YES → INJURED (94% confidence)
+│         └── NO  → INJURED (81% confidence)
+└── NO:  Is max_train_streak > 10 days?
+          ├── YES → AT RISK (41% confidence)
+          └── NO  → LOW RISK (18% confidence)
 ```
 
-We determine the optimal weights mathematically using the Out-of-Fold (OOF) predictions — predictions made by each model on the exact athletes it never trained on.
+Gradient Boosting builds **hundreds of such trees sequentially**, each one learning specifically from the mistakes of all previous trees. The final prediction is a weighted vote of all trees.
 
-### 3-Seed Repeated 5-Fold Cross-Validation
+### The Full Ensemble Pipeline
 
-With 3,000 athletes, a single random train/test split can swing the AUC by ±0.005 just from luck. We run:
-- **5 folds**: Data split into 5 equal parts, train on 4, test on 1, rotate 5 times
-- **3 seeds**: Repeat the whole thing 3 times with different random shuffles
-- Average across all 15 runs for a stable estimate
+```
+                          FINAL ENSEMBLE ARCHITECTURE
+================================================================================
 
-### AutoGluon SOTA Benchmark
+  30-Day Wearable + Metadata Logs (per athlete)
+  └──▶ src/features.py — leak-safe 223-feature extraction
+       └──▶ In-Fold Feature Selection (top 35 gain-ranked per fold)
 
-We also ran AutoGluon 1.6.1 at `best_quality` preset — an AutoML system that internally stacks LightGBM, XGBoost, CatBoost, Random Forests, Extra Trees, Neural Networks, and KNN, then stacks them in multiple layers. It won on the injury classifier and recovery head, so we blended it into our final submission.
+                     ┌──────────────────────────────────────┐
+                     │     3-FAMILY GRADIENT BOOST ENSEMBLE  │
+                     │  (3-seed repeated 5-fold CV each)     │
+                     ├──────────┬──────────────┬─────────────┤
+                     │ LightGBM │ XGBoost(GPU) │  CatBoost   │
+                     │  AUC     │  AUC         │  AUC        │
+                     │  0.7601  │  0.7633      │  0.7621     │
+                     └────┬─────┴──────┬───────┴──────┬──────┘
+                          │            │              │
+                          └────────────┼──────────────┘
+                                       │
+                           Non-negative OOF blend
+                           (weights fit on OOF matrix)
+                                       │
+                    ┌──────────────────┴──────────────────────┐
+                    │                                         │
+           Custom Ensemble                          AutoGluon 1.6.1
+           (our 3-model blend)                     best_quality preset
+                    │                         (stacks LGB+XGB+CB+RF+ET
+                    │                          +NN+KNN in 2 layers)
+                    └──────────────┬──────────────────────────┘
+                                   │
+                        Per-head best/blend decision
+                         ┌─────────┼──────────────┐
+                         │         │              │
+                     Classifier  Onset        Recovery
+                     (AG 95%    (blend        (AutoGluon
+                      blend)     78/22)        wins solo)
+                         └─────────┼──────────────┘
+                                   │
+                     + Sport+Gender Group Median
+                       (62% weight in recovery blend)
+                                   │
+                          submission.csv ✓
+
+================================================================================
+```
+
+### Model Blend Weights (Optimised on OOF)
+
+```
+Injury Classifier:   LightGBM 0.2%  │ XGBoost 54.6%  │ CatBoost 45.2%
+Onset Regressor:     LightGBM 35.9% │ XGBoost 64.1%  │ CatBoost  0.0%
+Recovery Regressor:  LightGBM 18.0% │ XGBoost  0.0%  │ CatBoost 20.5% │ Group Median 61.5%
+```
+
+### Why 3 Seeds × 5 Folds?
+
+With 3,000 athletes, a single random split can swing the AUC by ±0.005 just from fold assignment luck — the same magnitude as the gains we're chasing. Running 3 seeds × 5 folds = 15 OOF matrices and averaging gives a stable, reliable estimate.
 
 ---
 
 ## 🌌 Why 0.77 AUC and Not 1.0? The Oracle Ceiling Explained
 
-This is the question most beginners ask: **"Why can't we do better? Can we reach perfect accuracy?"**
+> **"Why can't any model reach 0.95 or 1.0 AUC here?"**
 
-The short answer: **No. And we proved exactly how much "perfect" even is.**
+The answer is fundamental to understanding this problem — and we proved it mathematically.
 
-### The Core Reason: Reality is Random
+### The Core Reason: Irreducible Biological Randomness
 
-Imagine 100 athletes who all have **exactly the same wearable data** — same ACWR, same sleep, same heart rate patterns, same everything. Maybe 70 of them will get injured and 30 won't.
+Imagine 100 athletes who all have **exactly identical wearable data** — same ACWR, same sleep, same heart rate. Maybe 70 will get injured and 30 won't. Nature flips a biased coin with $P(\text{injury}) = 0.70$.
 
-Why? Biological noise. Genetic differences. Random accidents. Bad landings. Factors no sensor can measure.
-
-Even an **all-knowing Oracle** ("God-mode model") that somehow knows the exact *true probability* of injury for each athlete — say $p = 0.70$ — still cannot tell you with certainty which specific athlete is in the unlucky 70 versus the lucky 30.
-
-### The Math: Computing the Ceiling
-
-The theoretical maximum ROC-AUC for ranking athletes by their true injury probabilities is:
-
-$$\text{AUC}^* = \frac{\sum_{i,j} \; p_i (1 - p_j) \cdot \mathbb{I}(p_i > p_j) \;\;+\;\; 0.5 \sum_{i,j} p_i (1 - p_j) \cdot \mathbb{I}(p_i = p_j)}{\sum_{i,j} \; p_i (1 - p_j)}$$
-
-This formula basically asks: *"If we rank athletes by their true injury probabilities, how often does a truly high-risk athlete rank above a truly low-risk one?"*
-
-In [`src/oracle.py`](src/oracle.py), we reconstruct these true probabilities using **cross-fitted isotonic regression** on the ACWR latent signal, then compute the formula above.
-
-### The Numbers
+Even a hypothetical **God-mode Oracle** that somehow knows the exact true probability $p_i$ for every athlete cannot tell you with certainty *which specific 70* athletes are in the unlucky group. The outcome is stochastic.
 
 ```
-Theoretical Bayes Ceiling (Oracle):   AUC = 0.7727
-Our Model's Final AUC:                AUC = 0.7718
+100 athletes, all identical sensor data, p = 0.70
 
-Gap to the maximum possible:               0.0009
-Percentage of achievable signal captured: 99.7%
+  Oracle says: "70% chance of injury"
+  Reality flips: 70 get injured, 30 don't
+  Oracle cannot predict which 30 dodge it — that's coin-flip territory
+
+→ Perfect AUC 1.0 is impossible when the label has intrinsic randomness
 ```
 
-**We're within 0.0009 of being as good as it's mathematically possible to be with this data.** That remaining 0.0009 gap isn't improvable with better algorithms — it's irreducible biological randomness.
+### The Analytic Bayes Ceiling
 
-The same analysis applies for the regression heads under MAE. The Bayes-optimal regression always predicts the conditional *median*, and the minimum achievable error is the conditional Mean Absolute Deviation (MAD) of the distribution around that median.
+For ranking by true probabilities $p$, the expected AUC of the Bayes-optimal ranker is (computed in [`src/oracle.py`](src/oracle.py)):
+
+$$\text{AUC}^* = \frac{\displaystyle\sum_{i \neq j} p_i (1-p_j)\,\mathbb{I}(p_i > p_j) \;+\; \tfrac{1}{2}\sum_{i \neq j} p_i(1-p_j)\,\mathbb{I}(p_i = p_j)}{\displaystyle\sum_{i \neq j} p_i(1-p_j)}$$
+
+We estimate the true $p_i$ by:
+1. Building a 1-D **load-ramp latent** — PCA over the tight ACWR family (r ≈ 0.99 within family)
+2. Fitting a **cross-fitted isotonic regression** (monotone Bayes rule) on the latent
+3. Evaluating the formula above on the resulting $\hat{p}$ vector
+
+```
+                    ORACLE COMPUTATION PIPELINE
+  ┌────────────────────────────────────────────────────────┐
+  │  ACWR family: hr_acwr, steps_acwr, cal_acwr, ...       │
+  │  (all r ≈ 0.99 with each other)                        │
+  └───────────────────────┬────────────────────────────────┘
+                          │ PCA → 1-D latent
+                          ▼
+  ┌────────────────────────────────────────────────────────┐
+  │  Cross-fitted Isotonic Regression (5-fold)             │
+  │  → honest p̂ᵢ = P(injured | latent) per athlete        │
+  └───────────────────────┬────────────────────────────────┘
+                          │ plug p̂ into closed-form formula
+                          ▼
+  ┌────────────────────────────────────────────────────────┐
+  │  AUC* = E[AUC | true p] = 0.7727                       │
+  │  Our model:              AUC = 0.7718                   │
+  │  Gap closed:             99.7%                          │
+  └────────────────────────────────────────────────────────┘
+```
+
+For the **regression heads**, the Bayes-optimal prediction under MAE is the conditional *median*, and the theoretical floor is the conditional Mean Absolute Deviation (MAD):
+
+| Head | Constant Baseline | Oracle Floor | Our Score | Gap Closed |
+|---|---|---|---|---|
+| `injured` (AUC) | 0.5000 | **0.7727** | 0.7718 | **99.7%** |
+| `onset` (MAE) | 7.609 days | **2.515 days** | 2.621 days | **97.9%** |
+| `recovery` (MAE) | 3.233 days | **2.841 days** | 2.869 days | **92.9%** |
 
 ---
 
-## 📊 How Scoring Works — ROC-AUC and MAE
+## 📐 Evaluation & Metric Strategy
 
-### 🔵 ROC-AUC (For Injury Classification)
+### 🔵 ROC-AUC (Injury Classification)
 
-ROC-AUC measures: *"If I randomly pick one injured athlete and one healthy athlete, how often does my model rank the injured one as higher risk?"*
-
-```
-0.5  =  Random coin flip (no predictive ability whatsoever)
-0.7  =  Decent model (gets it right 70% of the time)
-0.77 =  Our model (gets it right 77% of the time) ← very strong
-1.0  =  Perfect (impossible here due to randomness)
-```
-
-### 🟠 MAE — Mean Absolute Error (For Day Counts)
-
-MAE measures the average number of days you're off by:
+ROC-AUC answers: *"If I randomly pick one injured and one healthy athlete, how often does my model rank the injured one as higher risk?"*
 
 ```
-Predict: "Day 10"  |  Truth: "Day 13"  →  Error = 3 days
-Predict: "Day 8"   |  Truth: "Day 9"   →  Error = 1 day
-Predict: "Day 22"  |  Truth: "Day 14"  →  Error = 8 days
-
-Average these up → that's your MAE. Lower = better.
+0.50  ═══  Random coin flip — no signal whatsoever
+0.65  ═══  Weak model
+0.70  ═══  Decent model
+0.77  ═══════  Our model ← very strong for this data regime
+0.7727══════════  Bayes ceiling (physically unreachable)
+1.00  ════════════════════════════════  Perfect (impossible here)
 ```
 
-Our naive baseline (just always predict the median day) gives **7.6 days MAE**. Our model gets it down to **2.6 days MAE** — we're only off by about 2.5 days on average.
+### 🟠 MAE (Day-Count Regression Heads)
 
-### ⚠️ Why L1 Loss (Not L2) for the Regression Heads
+Mean Absolute Error = average number of days you're off by. Lower is better.
 
-Most people leave the default regression settings. Default = **L2 loss (Mean Squared Error)**, which trains the model to predict the **conditional mean**.
+```
+Predict "Day 10" | Truth "Day 13" → error = 3 days
+Predict "Day 8"  | Truth "Day 9"  → error = 1 day
+Predict "Day 22" | Truth "Day 14" → error = 8 days
+─────────────────────────────────────────────────
+Mean error: (3 + 1 + 8) / 3 = 4.0 MAE
+```
 
-But the competition metric is **MAE**. Under MAE, the mathematically optimal prediction is the **conditional median** (not mean). Switching to an **L1 loss objective** directly teaches the model to output medians instead of means. This gave a meaningful improvement in our scores.
+Baseline (always predict median day): **7.6 MAE**. Our model: **2.6 MAE**.
+
+### ⚠️ L1 vs L2 Loss — Why It Matters
+
+| Loss | Trains Model To Predict | Metric It Aligns With |
+|---|---|---|
+| L2 (MSE) — default | Conditional **mean** | MSE / RMSE |
+| **L1 (MAE) — ours** | Conditional **median** | **MAE ← competition metric** |
+
+Switching to L1 objective directly minimises the target metric. This is not cosmetic — under asymmetric noise (like injury timing), mean ≠ median and the difference is measurable.
 
 ---
 
 ## 🔮 The Recovery Insight — When Simple Beats Complex
 
-The biggest learning from this project: **the fanciest model is not always the best model.**
+The biggest lesson from this project: **the most sophisticated model is not always the right one.**
 
-### The Discovery
+### The Data Speaks
 
-We computed the correlation between every one of our 223 features and the `recovery_duration` target:
+We computed the correlation of every one of our 223 features with `recovery_duration`:
 
 ```
-Best correlation found: r = 0.067
+Feature with highest correlation:  r = 0.067
+(The remaining 222 features are all below this)
 ```
 
-**That's essentially zero.** Wearable sensors measure workload and cardiovascular fitness — they don't measure biological tissue healing rates. The number of days to recover is determined by:
+**That's essentially zero.** Wearable sensors measure cardiovascular load and movement — they cannot observe tissue healing rates, surgical outcomes, or the injury's anatomical severity.
 
-1. **What sport you play**: Basketball and Football players face more contact, higher injury severity → ~14 days. Other sports → ~10 days.
-2. **The injury type itself**: Which the sensors cannot detect.
+### What Actually Predicts Recovery
 
-### What This Means for Modeling
-
-If you train a decision tree on zero signal, it will overfit to noise and perform worse than doing nothing. Our unconstrained tree-based regressor scored **3.005 MAE** — *worse* than just predicting the median every time (**2.898 MAE**).
-
-### The Fix: Domain-Level Group Median
-
-Instead of fitting a complex model, we computed a simple **cross-fitted median per sport + gender group**:
-
-| Group | Median Recovery |
+| Sport Group | Median Recovery |
 |---|---|
-| Basketball players | 14.5 days |
-| Football players | 14.1 days |
-| All other sports | ~10 days |
+| Basketball | 14.5 days |
+| Football | 14.1 days |
+| All other sports | ~10.0 days |
 
-This single rule achieved **2.898 MAE**, beating all standalone gradient boosted models. We then blended this group median (taking **62% of the blend weight**) with our tree models, arriving at **2.869 MAE**.
+Recovery duration is governed by **sport identity** (and implicitly injury severity). Within a sport, after controlling for position, the max correlation with any of our 223 features is **0.067** — noise.
 
-> **Key Lesson**: Knowing *when not to use machine learning* is just as important as knowing how to use it.
+### The Fix: Cross-Fitted Group Median
+
+Instead of a complex tree model that will overfit noise:
+
+```
+For each athlete in training fold → compute median(recovery_duration) within sport+gender group
+Apply those medians to held-out fold → honest OOF error
+```
+
+Results:
+- L2-objective tree regressor: **3.005 MAE** (worse than doing nothing!)
+- Constant median baseline:     **2.898 MAE**
+- L1-objective tree regressor:  **2.928–2.948 MAE**
+- **Cross-fitted group median:  2.898 MAE** (beats all trees solo)
+- **Blend (62% group median + 38% trees): 2.869 MAE ← winner**
+
+> **Key Lesson:** Knowing *when not to use ML* is as important as knowing how to use it.
 
 ---
 
 ## 🎯 The Bimodal Threshold — Why 0.290 and Not 0.5
 
-Most binary classifiers use a default threshold of **0.5**: if the model says `probability > 0.50`, predict injured. But using 0.5 here would be a mistake.
+Most classifiers use a decision threshold of 0.5 by default. Using that here would be a significant mistake.
 
-### What the Score Distribution Actually Looks Like
+### The Score Distribution Is Not Gaussian
 
-When we calibrate all the injury probabilities on the test set and plot them:
+When we calibrate the injury probabilities on test data and plot them:
 
 ```
 Number of Athletes
       │
  700  │      ████
+ 650  │      ████
  600  │      ████
+ 550  │      ████
  500  │      ████
+ 450  │      ████
  400  │      ████
- 300  │      ████                               ████
- 200  │      ████                               ████
- 100  │      ████                               ████
-      └──────────────────────────────────────────────→
-         0.1   0.2   0.3   0.4   0.5   0.6   0.7   0.8
-                   Predicted Injury Probability
+ 350  │      ████
+ 300  │      ████                                    ████
+ 250  │      ████                                    ████
+ 200  │      ████                                    ████
+ 150  │      ████                                    ████
+ 100  │      ████                                    ████
+      └───────────────────────────────────────────────────→
+         0.10  0.20  0.30  0.40  0.50  0.60  0.70  0.80
+                     Calibrated Injury Probability
 
-~78% of athletes cluster at p ≈ 0.15–0.30  (background hazard group)
-~22% of athletes cluster at p ≥ 0.65       (overload hazard group)
-Almost nothing in between!
+  ← Background hazard (p≈0.15–0.30) │ Gap │ Overload (p≥0.65) →
+      ~78% of test athletes          │     │  ~22% of athletes
 ```
 
-The distribution is **bimodal** (two peaks, no middle). This directly maps to our two injury mechanisms: background hazard athletes are the left cluster, overload athletes are the right cluster.
+The distribution is **sharply bimodal with almost nothing in the gap**. This directly reflects the two injury mechanisms:
+- Left peak = background hazard athletes (low stable ACWR, random ~20% risk)
+- Right peak = overload athletes (ACWR > 1.13, near-certain injury)
 
-### Why 0.290 is Optimal
+### Why 0.290 is F1-Optimal
 
-The F1-optimal threshold sits **in the gap between the two clusters**, at **0.290**. This neatly captures all the overload-hazard athletes without incorrectly flagging the entire background-hazard group.
+| Threshold Choice | Result |
+|---|---|
+| 0.5 (default) | Misses most of the overload cluster (they're flagged but many background athletes aren't properly separated) |
+| 0.385 (mean probability) | Floods false positives from the left cluster — each has only ~23% real risk |
+| **0.290 (optimal)** | Sits precisely in the gap — captures all overload athletes, excludes background cluster |
 
-If we used 0.5 as threshold: we'd miss most of the dangerous athletes (they're at p ≈ 0.15–0.30 in the left cluster who are actually fine, but the dangerous ones are at p ≥ 0.65).
+The F1-optimal threshold is found by evaluating expected F1 on isotonic-calibrated OOF scores across a grid of thresholds, not by matching prevalence or using a fixed default.
 
-If we matched the mean probability (0.385): we'd flood false positives from the left cluster (many healthy athletes predicted as injured, tanking precision).
-
-> Always plot your score distribution before picking a threshold. For bimodal data, the mean is the wrong target.
+```
+Predicted positive rate:    23.8% (threshold at 0.290)
+Estimated true prevalence:  38.5% (from bimodal decomposition)
+Why the gap?                Background hazard athletes (left cluster) are not flagged
+                            — correctly, because each has only ~23% individual risk
+```
 
 ---
 
 ## 📊 Results & Final Numbers
 
-### Our Model vs The Theoretical Bayes Ceiling
+### Model vs Bayes Ceiling
 
-| Prediction Head | Metric | Dumb Baseline | Our Custom Ensemble | AutoGluon SOTA | **Final Blend** | Bayes Ceiling | **Gap Closed** |
+| Head | Metric | Dumb Baseline | Custom Ensemble | AutoGluon SOTA | **Final** | Oracle Ceiling | **Gap Closed** |
 |---|---|---|---|---|---|---|---|
 | `injured_in_risk_window` | ROC-AUC | 0.5000 | 0.7636 | 0.7718 | **0.7718** | 0.7727 | **99.7%** |
-| `injured_in_risk_window` | F1 Score | — | 0.6254 | 0.6391 | **0.6396** | 0.6404 | **99.9%** |
-| `onset_day_offset` | MAE ↓ | 7.6086 days | 2.6227 | 2.6466 | **2.6206** | 2.5152 | **97.9%** |
-| `recovery_duration` | MAE ↓ | 3.2333 days | 2.8950 | 2.8690 | **2.8690** | 2.8410 | **92.9%** |
+| `injured_in_risk_window` | F1 | — | 0.6254 | 0.6391 | **0.6396** | 0.6404 | **99.9%** |
+| `onset_day_offset` | MAE ↓ | 7.609 | 2.6227 | 2.6466 | **2.6206** | 2.5152 | **97.9%** |
+| `recovery_duration` | MAE ↓ | 3.233 | 2.8950 | 2.8690 | **2.8690** | 2.8410 | **92.9%** |
 
 ### Per-Model Breakdown
 
 | Head | LightGBM | XGBoost | CatBoost | Group Median | Blend |
 |---|---|---|---|---|---|
-| `injured_in_risk_window` (AUC) | 0.7601 | 0.7633 | 0.7621 | — | **0.7636** |
-| `onset_day_offset` (MAE) | 2.6326 | 2.6264 | 2.6555 | — | **2.6227** |
-| `recovery_duration` (MAE) | 2.9428 | 2.9478 | 2.9283 | **2.8981** | **2.8950** |
+| `injured` (AUC) | 0.7601 | 0.7633 | 0.7621 | — | **0.7636** |
+| `onset` (MAE) | 2.6326 | 2.6264 | 2.6555 | — | **2.6227** |
+| `recovery` (MAE) | 2.9428 | 2.9478 | 2.9283 | **2.8981** | **2.8950** |
 
-### Final Blend Weights
-
-```
-Injury Classifier:
-  LightGBM: 0.2%  |  XGBoost: 54.6%  |  CatBoost: 45.2%
-
-Onset Day Regressor:
-  LightGBM: 35.9%  |  XGBoost: 64.1%  |  CatBoost: 0%
-
-Recovery Regressor:
-  LightGBM: 18.0%  |  XGBoost: 0%  |  CatBoost: 20.5%  |  Group Median: 61.5%
-```
-
-### Final Submission Stats
+### Final Submission
 
 ```
-Decision threshold:           0.290 (on isotonic-calibrated probabilities)
-Predicted positive rate:      23.8% of test athletes flagged as injured
-Estimated true prevalence:    38.5% (bimodal distribution — threshold sits in the gap)
-Training positive rate:       35.0%
+Decision threshold:         0.290 (isotonic-calibrated, F1-optimal)
+Test predicted positives:   23.8% of athletes flagged as injured
+Train positive rate:        35.0%
+Features per head:          35 / 35 / 20 (classifier / onset / recovery)
 ```
 
 ---
 
 ## ❌ What Didn't Work (Negative Results)
 
-We document these because negative results are just as scientifically valuable — and because they belong in any honest presentation.
+We document these because **negative results belong in any honest scientific presentation**, and they reveal things about the data that positive results can't.
 
-### 1. AFT Survival Model (`src/survival.py`)
+### 1. AFT Survival Model [`src/survival.py`](src/survival.py)
 
-**The idea:** Since `injured` and `onset` are really a single time-to-event $T$, a survival model should use ALL 3,000 athletes (treating healthy athletes as "right-censored" at $T > 30$ days). This is technically more correct statistically than only training the onset head on 1,050 injured athletes.
+**Hypothesis:** Since `injured` and `onset` are one censored time $T$, an Accelerated Failure Time model should use all 3,000 athletes (treating healthy ones as right-censored at $T > 30$) instead of fitting onset only on 1,050 injured athletes.
 
-**What happened:** It lost to gradient boosted trees. AUC dropped from **0.751 → 0.747**.
+**Result:** Lost on both heads. AUC 0.7466 vs 0.7508, onset MAE 2.868 vs 2.694.
 
-**Why:** The parametric lognormal AFT model assumes one single hazard curve shape. Our data has *two* mechanisms (background + overload) which form two completely different curves. Forcing one parametric shape to fit both costs more than the extra data rows gain.
+**Why it failed:** The parametric lognormal AFT assumes one single hazard curve shape. Our two-mechanism data (background + overload) violates this assumption — forcing one parametric curve to represent two completely different biological processes costs more than the extra rows gain.
 
-### 2. More Features Hurts Performance
+### 2. Using All 223 Features
 
-**The idea:** More information = better predictions, right?
+**Hypothesis:** More information → better predictions.
 
-**What happened:** Using all 223 features scored *below* using just a single raw `hr_acwr` column. The ACWR family is so redundant (r ≈ 0.99 within itself) that trees spread their splits across near-identical copies and overfit. Selecting 35 features recovered the loss.
+**Result:** 206 features scored below a *single raw `hr_acwr` column*. The ACWR family (r ≈ 0.99 within itself) causes trees to spread splits across near-identical copies → overfitting. In-fold selection of 35 features recovered the full loss and then some.
 
-### 3. TabPFN (Tabular Foundation Model)
+### 3. TabPFN — Tabular Foundation Model [`src/bench_tabpfn.py`](src/bench_tabpfn.py)
 
-**The idea:** TabPFN is a pretrained transformer for tabular data, claimed to be SOTA for datasets under 10k rows.
+**Hypothesis:** TabPFN is a pretrained transformer for tabular data, claimed SOTA in the <10k sample regime.
 
-**What happened:** Blocked. Its pip package now requires an interactive license click-through that can't be completed in a headless environment. See `src/bench_tabpfn.py` for the attempted setup.
+**Result:** Blocked. Its pip package now requires an interactive browser-based license click-through that cannot be completed headlessly. The attempt is documented for transparency.
 
 ---
 
@@ -555,43 +641,48 @@ We document these because negative results are just as scientifically valuable �
 ```
 .
 ├── README.md                       ← You are here
-├── RESULTS.md                      ← Detailed benchmark table
-├── requirements.txt                ← Python dependencies
+├── RESULTS.md                      ← Detailed benchmark tables
+├── requirements.txt                ← Python dependencies (pip install -r)
 ├── submission.csv                  ← Final predictions for 1,100 test athletes
 │
 ├── docs/
-│   ├── problem_statement.md        ← Official Unstop competition brief
-│   └── findings.md                 ← Detailed EDA findings (deck material)
+│   ├── problem_statement.md        ← Official Unstop competition brief (scraped)
+│   └── findings.md                 ← Full EDA findings (deck source material)
 │
-├── models/                         ← Serialized LightGBM model files
-│   ├── classifier.txt
+├── models/                         ← Saved LightGBM model weights
+│   ├── classifier.txt              ← Injury classifier (700 KB, loadable)
 │   ├── onset_day_offset_regressor.txt
 │   └── recovery_duration_regressor.txt
 │
-├── reports/                        ← Generated figures, metrics, logs
-│   ├── 01_data_split.png           ← Train/test timeline visualization
-│   ├── 02_label_distributions.png  ← Injury rate distributions
-│   ├── 03_injury_rate_by_group.png ← Injury rate by sport/gender
-│   ├── 04_metadata_drivers.png     ← Feature correlations with injury
-│   ├── 05_workload_distributions.png
-│   ├── 06_top_correlations.png     ← Top feature correlations
-│   ├── feature_importance.png      ← SHAP/gain feature importance
-│   ├── metrics.json                ← All final evaluation metrics
-│   └── oracle.json                 ← Bayes ceiling computation results
+├── reports/                        ← Generated figures, logs, metric files
+│   ├── 01_data_split.png           ← Train/test timeline diagram
+│   ├── 02_label_distributions.png  ← Injury label distributions
+│   ├── 03_injury_rate_by_group.png ← Injury rate by sport / gender
+│   ├── 04_metadata_drivers.png     ← Metadata feature correlations
+│   ├── 05_workload_distributions.png ← ACWR and workload plots
+│   ├── 06_top_correlations.png     ← Top feature→target correlations
+│   ├── feature_importance.png      ← Gain-based feature importance
+│   ├── metrics.json                ← All final numeric results
+│   ├── oracle.json                 ← Bayes ceiling values
+│   └── feature_sweep.json          ← Feature count sweep results
 │
 └── src/
-    ├── features.py                 ← Zero-leakage feature engineering (223 features)
+    ├── features.py                 ← Leak-safe feature engineering (223 features)
     ├── oracle.py                   ← Analytic Bayes ceiling computation
     ├── select_features.py          ← In-fold feature count sweep
-    ├── final.py                    ← Main 3-family ensemble + OOF blender
-    ├── finalize_blend.py           ← AutoGluon + custom ensemble final blend
+    ├── final.py                    ← 3-family ensemble + OOF blender
+    ├── finalize_blend.py           ← AutoGluon + custom ensemble combiner
     ├── bench_autogluon.py          ← AutoGluon SOTA benchmark
     ├── bench_tabpfn.py             ← TabPFN attempt (blocked by license)
     ├── survival.py                 ← AFT survival experiment (negative result)
-    ├── eda.py                      ← EDA figures for presentation deck
     ├── recovery_v2.py              ← Group median recovery experiment
-    ├── test_leakage.py             ← Automated leakage tests
-    └── validate_submission.py      ← Submission schema validation
+    ├── eda.py                      ← EDA figures for deck
+    ├── test_leakage.py             ← Automated leakage unit tests
+    ├── pipeline.py                 ← Alternate pipeline entry point
+    ├── train.py                    ← Training utilities
+    ├── tune.py                     ← Hyperparameter tuning experiments
+    ├── report.py                   ← Metric report generation
+    └── validate_submission.py      ← Submission schema & boundary checks
 ```
 
 ---
@@ -608,42 +699,61 @@ pip install -r requirements.txt
 
 ### 2. Place the Dataset
 
-Download the competition data from the [official Google Drive link](https://drive.google.com/drive/folders/1aoVw4QdXaPLH8H_S3hqYnn30-f-xVOnx) and extract into:
+Download from the [official Google Drive link](https://drive.google.com/drive/folders/1aoVw4QdXaPLH8H_S3hqYnn30-f-xVOnx) and extract:
 
 ```
 data/
-├── train/    ← 10 CSV files, 3,000 athletes, 60 days each
-└── test/     ← 10 CSV files, 1,100 athletes, 30 days each
+├── train/    ← 10 CSV files, 3,000 athletes, 60 days each (~660 MB)
+└── test/     ← 10 CSV files, 1,100 athletes, 30 days each (~120 MB)
 ```
 
 ### 3. Run the Pipeline
 
 ```bash
-# Step 1: Build the 223-feature cache (reads ~660 MB of CSV, takes ~5 minutes)
+# 1. Build leak-safe feature cache (~5 min, reads 660 MB CSV → parquet)
 python src/features.py
 
-# Step 2: Calculate the theoretical Bayes ceiling (the Oracle)
+# 2. Compute theoretical Bayes ceiling (the Oracle)
 python src/oracle.py
 
-# Step 3: Find the optimal feature count per prediction head
+# 3. Sweep optimal feature count per prediction head
 python src/select_features.py
 
-# Step 4: Train the 3-model ensemble and generate OOF + test predictions
+# 4. Train 3-family ensemble → OOF + test predictions + metrics.json
 python src/final.py
 
-# Step 5: Run AutoGluon SOTA benchmark
+# 5. Run AutoGluon SOTA benchmark (requires: pip install autogluon)
 python src/bench_autogluon.py
 
-# Step 6: Blend AutoGluon + custom ensemble, finalize submission.csv
+# 6. Blend AutoGluon + custom ensemble → final submission.csv
 python src/finalize_blend.py
 
-# Step 7: Validate submission format and boundaries
+# 7. Validate submission format and value boundaries
 python src/validate_submission.py
 
-# Optional: Generate EDA figures for the presentation
+# Optional: Generate EDA figures for the presentation deck
 python src/eda.py
+```
+
+### 4. Load the Saved Models Directly
+
+```python
+import lightgbm as lgb
+import pandas as pd
+
+# Load the injury classifier
+clf = lgb.Booster(model_file="models/classifier.txt")
+
+# Load features (run src/features.py first to build the cache)
+X_test = pd.read_parquet("data/feat_test.parquet")
+for c in ["sport", "gender", "dominant_side", "position"]:
+    X_test[c] = X_test[c].cat.codes
+
+# Predict injury probability for each test athlete
+probabilities = clf.predict(X_test.drop(columns=["Id"]))
+print(probabilities[:5])  # e.g. [0.18, 0.82, 0.14, 0.71, 0.23]
 ```
 
 ---
 
-*Built for PlayHack ML Track 2026 at IIT Guwahati. Prize pool: ₹4,00,000. Registration deadline: August 29, 2026.*
+*Built for PlayHack ML Track 2026 at IIT Guwahati · Prize Pool ₹4,00,000 · Registration deadline: 29 August 2026*
