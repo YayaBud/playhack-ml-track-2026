@@ -3,7 +3,7 @@
 [![IIT Guwahati Hackathon](https://img.shields.io/badge/IIT%20Guwahati-PlayHack%202026-blue.svg)](https://unstop.com/competitions/playhack-ml-track-iit-guwahati-1739468)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
 [![Bayes Ceiling Closed](https://img.shields.io/badge/Bayes%20Ceiling%20Closed-99.7%25-gold.svg)](#-why-077-auc-and-not-10-the-oracle-ceiling-explained)
-[![AutoGluon Benchmark](https://img.shields.io/badge/AutoGluon-SOTA%20Benchmarked-orange.svg)](#-the-ml-models--how-do-they-learn)
+[![AutoGluon Benchmark](https://img.shields.io/badge/AutoGluon-SOTA%20Benchmarked-orange.svg)](#-the-ml-models--final-ensemble-architecture)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 > **A full end-to-end ML solution for predicting athlete injuries from wearable sensor data.**
@@ -60,6 +60,9 @@ Imagine you're the **coach of a professional sports team**. Every athlete wears 
 ================================================================================
 ```
 
+![Target Label Distributions](reports/02_label_distributions.png)
+*Figure 1: Ground truth distributions for all three target variables across the training cohort (Binary injury rate 35%, onset day offset ranging from Day 1 to 30, and recovery duration spanning 5 to 20 days).*
+
 ---
 
 ## 📦 Dataset Architecture & Composition
@@ -88,6 +91,9 @@ The dataset is **10 relational CSV tables**, each capturing a different modality
 This is the single most important thing to understand about this competition. **Most teams will fall into this trap without realising it.**
 
 ### The Setup
+
+![Data Split Timeline](reports/01_data_split.png)
+*Figure 2: The observation window (Days 1–30) vs the future risk window (Days 31–60). Training data provides both, while test data only provides Days 1–30.*
 
 ```
 data/train/  →  60 days of wearable data  (2026-01-05 to 2026-03-05)
@@ -147,6 +153,12 @@ When we plotted injury rates against training workload, something striking emerg
 ================================================================================
 ```
 
+![Top Correlations](reports/06_top_correlations.png)
+*Figure 3: Top correlations with injury risk and onset day offset. Workload ramp and monotony features dominate early injury occurrence.*
+
+![Injury Rate by Demographic Groups](reports/03_injury_rate_by_group.png)
+*Figure 4: Injury risk across sports, positions, genders, and experience brackets.*
+
 ### ⚡ Mechanism 1 — Overload Hazard (Predictable)
 
 Athletes who spike their training intensity faster than their body can adapt:
@@ -198,6 +210,9 @@ ACWR > 1.13  →  DANGER ZONE           →  94–100% injury rate
 ACWR > 1.5   →  Severe spike          →  Injury within ~5 days
 ```
 
+![Workload Distributions](reports/05_workload_distributions.png)
+*Figure 5: Workload and ACWR distributions comparing injured vs uninjured athletes. Overload hazard athletes exhibit pronounced spikes in 7-day acute volume.*
+
 ### Why We Have Many ACWR Variants
 
 We compute ACWR across every available signal:
@@ -217,6 +232,9 @@ We compute ACWR across every available signal:
 ## 🛠️ Feature Engineering — 223 Signals, 35 Selected
 
 Raw data is millions of rows of timestamps and numbers. ML models need a single row per athlete summarising their 30-day profile. We extract **223 features** across 5 domains.
+
+![Metadata Drivers](reports/04_metadata_drivers.png)
+*Figure 6: Exploration of metadata factors (Age, BMI, Prior Injuries, Experience) and their interaction with injury propensity.*
 
 ### The Athlete Profile (What Each Feature Row Looks Like)
 
@@ -279,6 +297,9 @@ Signals: steps, calories, very-active-min, active-min, sedentary,
          load, distance, heart-rate, resting-HR, HR-max, HR-range,
          intensity, session-hours → each gets the full 11-stat block
 ```
+
+![Feature Importance](reports/feature_importance.png)
+*Figure 7: Feature gain importance ranking across cross-validation folds. Workload ratio, monotony, and resting HR metrics lead feature importance.*
 
 ### Why 35 Features Beat All 223 (In-Fold Selection)
 
@@ -495,6 +516,9 @@ Feature with highest correlation:  r = 0.067
 
 **That's essentially zero.** Wearable sensors measure cardiovascular load and movement — they cannot observe tissue healing rates, surgical outcomes, or the injury's anatomical severity.
 
+![Injury Rate by Sport](reports/injury_rate_by_sport.png)
+*Figure 8: Baseline injury prevalence and recovery distributions separated by sport category.*
+
 ### What Actually Predicts Recovery
 
 | Sport Group | Median Recovery |
@@ -528,6 +552,9 @@ Results:
 ## 🎯 The Bimodal Threshold — Why 0.290 and Not 0.5
 
 Most classifiers use a decision threshold of 0.5 by default. Using that here would be a significant mistake.
+
+![Class Balance](reports/class_balance.png)
+*Figure 9: Training label class balance (35% injured vs 65% uninjured).*
 
 ### The Score Distribution Is Not Gaussian
 
