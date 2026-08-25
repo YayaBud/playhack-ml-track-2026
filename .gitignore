@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and environments
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+
+# Editor and IDE metadata
+.vscode/
+.idea/
+.claude/
+
+# CatBoost and AutoGluon runtime directories & heavy artifacts
+catboost_info/
+ag_models/
+*.pkl
+*.parquet
+
+# Large raw competition datasets (> 100MB per file)
+# Download from official Drive link mentioned in docs/problem_statement.md
+data/train/
+data/test/
+*.csv.gz
+
+# Retain lightweight metadata / submission CSVs
+!submission.csv
+!data/train/athlete_metadata.csv
+!data/train/train_labels.csv
+!data/test/athlete_metadata.csv
+!data/test/sample_submission.csv

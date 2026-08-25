@@ -1,0 +1,15 @@
+=== injured_in_risk_window ===
+  ours 0.76364  AG 0.77176  blend 0.77176  weights {'ours': np.float64(0.04982020949502189), 'ag': np.float64(0.9501797905049781)}
+  -> using blend(ours,AG) {'ours': np.float64(0.05), 'ag': np.float64(0.95)}  AUC 0.77176
+  threshold 0.290  test positive rate 0.2382 (was 0.2545)
+
+=== onset_day_offset ===
+  ours 2.6227  AG 2.6466  blend 2.6206  weights {'ours': np.float64(0.7809364400825481), 'ag': np.float64(0.21906355991745188)}
+  -> using blend  MAE 2.6206
+
+=== recovery_duration ===
+  ours(+grp) 2.8950  AG 2.8690  (no OOF array saved for ours; taking whichever is lower)
+  -> using AutoGluon  MAE 2.8690
+
+wrote submission.csv + reports/metrics.json
+FINAL: clf AUC 0.7718 (blend(ours,AG) {'ours': np.float64(0.05), 'ag': np.float64(0.95)}) | onset MAE 2.6206 (blend) | recovery MAE 2.8690 (AutoGluon)

@@ -1,0 +1,16 @@
+{
+  "achievable_auc_isotonic_on_latent": 0.7522019536019536,
+  "oracle_auc": 0.7656482070900218,
+  "oracle_f1": 0.6253575822136597,
+  "oracle_f1_threshold": 0.30999999999999994,
+  "constant_mae_onset": 7.6085714285714285,
+  "achievable_mae_onset_knn": 3.172857142857143,
+  "oracle_mae_onset": 3.20652380952381,
+  "constant_mae_recovery": 3.2333333333333334,
+  "mae_recovery_by_sport": 2.9180952380952383,
+  "mae_recovery_by_position": 2.9652380952380955,
+  "mae_recovery_by_sport+gender": 2.893809523809524,
+  "mae_recovery_by_position+gender": 3.010952380952381,
+  "oracle_mae_recovery": 2.842857142857143,
+  "recovery_max_residual_corr": 0.06666751810676513
+}

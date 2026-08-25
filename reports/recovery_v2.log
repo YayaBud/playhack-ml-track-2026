@@ -1,0 +1,12 @@
+=== recomputing tree OOF for recovery_duration (k=20) ===
+  lgb : MAE 2.9428
+  xgb : MAE 2.9478
+  cat : MAE 2.9283
+
+=== cross-fitted sport+gender group median ===
+  grp : MAE 2.8981
+
+  BLEND (+grp): MAE 2.8950  weights {'lgb': np.float64(0.1795540792934601), 'xgb': np.float64(3.1569533452631973e-06), 'cat': np.float64(0.20497112649890178), 'grp': np.float64(0.615471637254293)}
+
+recovery_duration: 2.9261 -> 2.8950  (ceiling 2.8410)
+wrote reports/metrics.json + submission.csv

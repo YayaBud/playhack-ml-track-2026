@@ -1,0 +1,48 @@
+=== TabPFN classifier: injured_in_risk_window (n=3000, d=206) ===
+
+TabPFN requires a one-time license acceptance to download model weights for local inference.
+Opening your browser to complete login/registration…
+
+  https://ux.priorlabs.ai/login?callback=http://localhost:57313&hf_repo_id=tabpfn_3
+
+Waiting for login to complete…
+
+Having trouble? You can also authenticate manually:
+  1. Open https://ux.priorlabs.ai/account in a browser (log in or register if needed)
+  2. Accept the license at https://ux.priorlabs.ai/account/licenses
+  3. Copy your API Key
+  4. Paste the API key below
+
+API key (or press Enter to keep waiting): Traceback (most recent call last):
+  File "D:\iit_guwahati_ai_hack\src\bench_tabpfn.py", line 106, in <module>
+    main()
+  File "D:\iit_guwahati_ai_hack\src\bench_tabpfn.py", line 70, in main
+    oof_c = run_clf(X, y)
+            ^^^^^^^^^^^^^
+  File "D:\iit_guwahati_ai_hack\src\bench_tabpfn.py", line 44, in run_clf
+    m.fit(X.iloc[tr_i].to_numpy(), y.iloc[tr_i].to_numpy())
+  File "contextlib.py", line 81, in inner
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\classifier.py", line 841, in fit
+    byte_size = self._initialize_model_variables()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\classifier.py", line 646, in _initialize_model_variables
+    return initialize_model_variables_helper(self, self.estimator_type)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\base.py", line 404, in initialize_model_variables_helper
+    initialize_tabpfn_model(
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\base.py", line 187, in initialize_tabpfn_model
+    load_model_criterion_config(
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\model_loading.py", line 686, in load_model_criterion_config
+    raise res[0]
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\model_loading.py", line 514, in _download_model
+    ensure_license_accepted(hf_repo_id=_HF_REPOS[version])
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\browser_auth.py", line 619, in ensure_license_accepted
+    token = try_browser_login(gui_url, hf_repo_id=hf_repo_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\browser_auth.py", line 542, in try_browser_login
+    token = _poll_for_token(auth_event, received_token)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chaud\pyenv312\Lib\site-packages\tabpfn\browser_auth.py", line 342, in _poll_for_token
+    ready, _, _ = select.select([sys.stdin], [], [], 0.5)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [WinError 10038] An operation was attempted on something that is not a socket

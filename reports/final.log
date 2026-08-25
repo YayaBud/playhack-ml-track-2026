@@ -1,0 +1,34 @@
+matrix (3000, 206)  test (1100, 206)  positives 1050
+
+=== injured_in_risk_window (k=35) ===
+  lgb : AUC 0.76011
+  xgb : AUC 0.76327
+  cat : AUC 0.76207
+  BLEND: AUC 0.76364  {'lgb': 0.001995749471863482, 'xgb': 0.5459454491473975, 'cat': 0.4520588013807391}
+  CEILING: AUC 0.77266   F1 0.64042
+  MODEL  : AUC 0.76364   F1 0.63962 @thr 0.405
+
+=== onset_day_offset (k=35, n=1050) ===
+  lgb : MAE 2.6326
+  xgb : MAE 2.6264
+  cat : MAE 2.6555
+  BLEND  : MAE 2.6227   {'lgb': 0.35925617226471723, 'xgb': 0.640743741940059, 'cat': 8.579522374204005e-08}
+  CEILING: MAE 2.5152   (constant-median baseline 7.6086)
+
+=== recovery_duration (k=20, n=1050) ===
+  lgb : MAE 2.9428
+  xgb : MAE 2.9478
+  cat : MAE 2.9283
+  BLEND  : MAE 2.9261   {'lgb': 0.08409638275100464, 'xgb': 0.16075265256803947, 'cat': 0.7551509646809559}
+  CEILING: MAE 2.8314   (constant-median baseline 3.2333)
+
+  threshold: OOF-tuned raw 0.405 would fire on 0.2545 of test; calibrated cut 0.320 fires on 0.2545 (test E[rate] 0.3853)
+
+==============================================================
+  HEAD                      MODEL     CEILING   BASELINE   % of gap
+==============================================================
+  injured (AUC)            0.7636    0.7727    0.5000      96.7%
+  onset day offset        2.6227    2.5152    7.6086      97.9%
+  recovery duration       2.9261    2.8314    3.2333      76.4%
+==============================================================
+wrote submission.csv + reports/metrics.json

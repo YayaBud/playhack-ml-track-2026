@@ -1,0 +1,63 @@
+=== AutoGluon classifier: injured_in_risk_window ===
+2026-08-26 01:27:34,314	INFO worker.py:2015 -- Started a local Ray instance. View the dashboard at [1m[32mhttp://127.0.0.1:8265 [39m[22m
+[33m(raylet)[0m Stack (most recent call first):
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 627 in job_logging_config
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 2789 in disconnect
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 2114 in shutdown
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 1170 in wrapper
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.pyStack (most recent call first):
+[33m(raylet)[0m ", line 627 in job_logging_config
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py"  File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py, line 2789 in disconnect
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py"", line 1170 in wrapper, line 627 in job_logging_config
+[33m(raylet)[0m 
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py"", line 110 in , line 1170 in wrapper
+[33m(raylet)[0m wrapper
+  AUC 0.77176  (307s)
+                     model  score_val eval_metric  pred_time_val    fit_time  pred_time_val_marginal  fit_time_marginal  stack_level  can_infer  fit_order
+0      WeightedEnsemble_L3   0.771756     roc_auc       2.594653  146.996773                0.001000           0.146804            3       True         19
+1      WeightedEnsemble_L2   0.767198     roc_auc       0.264853   60.617714                0.000514           0.182151            2       True         12
+2          CatBoost_BAG_L2   0.765861     roc_auc       2.202143  134.477801                0.079924          33.034001            2       True         17
+3        LightGBMXT_BAG_L1   0.765455     roc_auc       0.042517    5.401679                0.042517           5.401679            1       True          1
+4          LightGBM_BAG_L2   0.761187     roc_auc       2.173239  112.348841                0.051020          10.905042            2       True         14
+5          CatBoost_BAG_L1   0.759321     roc_auc       0.063902   43.372556                0.063902          43.372556            1       True          5
+6  RandomForestGini_BAG_L2   0.758008     roc_auc       2.462709  102.910927                0.340490           1.467128            2       True         15
+7        LightGBMXT_BAG_L2   0.757089     roc_auc       2.174754  106.597679                0.052535           5.153879            2       True         13
+
+=== AutoGluon regressor: onset_day_offset ===
+  MAE 2.6466  (303s)
+                    model  score_val          eval_metric  pred_time_val    fit_time  pred_time_val_marginal  fit_time_marginal  stack_level  can_infer  fit_order
+0     WeightedEnsemble_L3  -2.646551  mean_absolute_error       1.135352  133.891920                0.001965           0.101606            3       True         15
+1         LightGBM_BAG_L2  -2.681975  mean_absolute_error       0.830146  116.193155                0.047771          13.003396            2       True         12
+2     WeightedEnsemble_L2  -2.686260  mean_absolute_error       0.626697   44.552314                0.001001           0.094796            2       True         10
+3       LightGBMXT_BAG_L2  -2.690824  mean_absolute_error       0.921434  117.907645                0.139059          14.717886            2       True         11
+4  RandomForestMSE_BAG_L2  -2.693194  mean_absolute_error       0.946558  106.069032                0.164182           2.879273            2       True         13
+5    ExtraTreesMSE_BAG_L1  -2.704941  mean_absolute_error       0.162517    1.016381                0.162517           1.016381            1       True          5
+6  RandomForestMSE_BAG_L1  -2.719171  mean_absolute_error       0.157181    2.871421                0.157181           2.871421            1       True          3
+7         CatBoost_BAG_L2  -2.722532  mean_absolute_error       0.866156  128.118030                0.083781          24.928271            2       True         14
+
+=== AutoGluon regressor: recovery_duration ===
+  MAE 2.8690  (303s)
+                    model  score_val          eval_metric  pred_time_val   fit_time  pred_time_val_marginal  fit_time_marginal  stack_level  can_infer  fit_order
+0     WeightedEnsemble_L2  -2.868960  mean_absolute_error       0.534089  86.561398                0.001002           0.096494            2       True         11
+1    LightGBMLarge_BAG_L1  -2.905349  mean_absolute_error       0.038309  33.004404                0.038309          33.004404            1       True          9
+2       LightGBMXT_BAG_L1  -2.908557  mean_absolute_error       0.028244   2.756958                0.028244           2.756958            1       True          1
+3    ExtraTreesMSE_BAG_L1  -2.920238  mean_absolute_error       0.164860   1.122099                0.164860           1.122099            1       True          5
+4  RandomForestMSE_BAG_L1  -2.921101  mean_absolute_error       0.168652   3.140672                0.168652           3.140672            1       True          3
+5          XGBoost_BAG_L1  -2.928159  mean_absolute_error       0.046556  12.999029                0.046556          12.999029            1       True          7
+6         LightGBM_BAG_L1  -2.936775  mean_absolute_error       0.033411   7.617999                0.033411           7.617999            1       True          2
+7         CatBoost_BAG_L1  -2.957653  mean_absolute_error       0.060009  60.841725                0.060009          60.841725            1       True          4
+
+====================================================================
+  HEAD                       OURS      AutoGluon   TabPFN     best
+====================================================================
+  injured (AUC, hi=better) 0.7636    0.7718       -       AutoGluon
+  onset_day_offset   (MAE, lo=better) 2.6227    2.6466       -       ours
+  recovery_duration  (MAE, lo=better) 2.8950    2.8690       -       AutoGluon
+====================================================================
+wrote reports/bench_autogluon.json
+[33m(raylet)[0m Stack (most recent call first):[32m [repeated 9x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 627 in job_logging_config[32m [repeated 8x across cluster][0m
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 2789 in disconnect[32m [repeated 8x across cluster][0m
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 2114 in shutdown[32m [repeated 10x across cluster][0m
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\client_mode_hook.py", line 110 in wrapper[32m [repeated 18x across cluster][0m
+[33m(raylet)[0m   File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\client_mode_hook.py  File "C:\Users\chaud\pyenv312\Lib\site-packages\ray\_private\worker.py", line 2789 in disconnect
