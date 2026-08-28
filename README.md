@@ -115,16 +115,26 @@ is 0.0006.
 
 **The trap in the data.** Train has 60 days per athlete; test has 30. Days 31-60
 *are* the risk window being predicted. Any feature built from them leaks the
-answer and cannot exist at test time. Everything is clipped to days 1-30, enforced
-by an assertion at build time and a [test](src/test_leakage.py) with a negative
-control.
+answer and cannot exist at test time.
 
-**Injury is two mechanisms, not one.** Athletes split cleanly into a background
-hazard (~23% injury rate) and an overload hazard (~93%), separated by a sharp
-threshold in **ACWR** — acute:chronic workload ratio, this week's training load
-over the recent baseline. Ramp up too fast and risk spikes. That single construct
-drives most of the signal, which is why the features are built around ACWR,
-monotony and strain rather than raw activity totals.
+![Train/test split](reports/01_data_split.png)
+
+Everything is clipped to days 1-30, enforced by an assertion at build time and a
+[test](src/test_leakage.py) with a negative control that must fail if the guard
+is removed.
+
+**Injury is two mechanisms, not one.** Athletes split into a background hazard
+(~23% injury rate) and an overload hazard, separated by **ACWR** — acute:chronic
+workload ratio, this week's training load over the recent baseline. Ramp up too
+fast and risk spikes.
+
+![Workload distributions](reports/05_workload_distributions.png)
+
+`load_acwr` and `load_strain` separate injured from healthy into two visibly
+distinct populations, while sleep and raw activity totals barely move. That is
+why the features are built around ACWR, monotony and strain rather than step
+counts — and reading the generator back out of the data confirms it: above
+`steps_acwr` 1.64 the injury rate is **1.0000**, 300 athletes, zero exceptions.
 
 **The models.** 223 leak-safe features → 20-35 selected per head *inside* each
 fold → LightGBM + XGBoost + CatBoost, blended with weights fitted on out-of-fold
@@ -155,28 +165,66 @@ These labels are partly random: two athletes with identical data can land on
 opposite outcomes. So no model reaches a perfect score, and "how close are we to
 the best *possible*" is more useful than a raw number.
 
-Treat the ceiling as an **estimate of irreducible error, not a proven bound**. An
-earlier version of it conditioned on a single recovered feature while the model
-uses 35 — which made the model appear to score *113% of maximum*. That is a signal
-the estimate is too pessimistic, not a triumph; `official_ceiling.py` now warns
-whenever a score exceeds its ceiling.
+It is computed **two independent ways** — once from the model's own out-of-fold
+predictions, and once analytically from the reverse-engineered data generating
+process with no model involved ([`src/generator_ceiling.py`](src/generator_ceiling.py)):
+
+| | ours | data-derived Bayes | model-conditioned | ceiling used | closed |
+|---|---|---|---|---|---|
+| F1 | 0.5210 | 0.5226 | 0.5246 | 0.5246 | 99.3% |
+| skill_onset | 0.6541 | 0.6285 | 0.6647 | 0.6647 | 98.4% |
+| skill_recovery | 0.1075 | 0.1073 | 0.1329 | 0.1329 | 80.9% |
+| mean of three | 0.4275 | 0.4195 | 0.4407 | 0.4407 | 97.0% |
+
+The model-free route independently reproduces the threshold decision:
+**Bayes-optimal play flags 99.0% of athletes**, and playing for F1 instead halves
+the achievable score (0.4195 → 0.2101). It also pins F1: at full recall F1 is
+`2·prevalence/(1+prevalence)` = 0.5185, so 0.52 is a ceiling, not a weak model.
+
+Treat a ceiling as an **estimate of irreducible error, not a proven bound** — and
+one that is only as good as its estimator. Two earlier versions of this analysis
+conditioned on less information than the model they were bounding (one feature,
+then eight), which made the model appear to score *113%* and then *108.9%* of
+"maximum". That signals a bad bound, not a good model. Both ceiling scripts now
+warn whenever a score exceeds them, and the reported ceiling is the tightest
+estimate across methods.
 
 ---
 
 ## Repository
 
+**Round 1 deliverables**
+
+| | |
+|---|---|
+| [`playhack_ml_submission.zip`](playhack_ml_submission.zip) | the submission archive — models + code + `submission.csv`, 2.9 MB. Verified by extracting clean and reproducing the CSV byte-identically |
+| [`PlayHack_ML_Round1_Submission.pptx`](PlayHack_ML_Round1_Submission.pptx) | the deck, 14 slides |
+| [`submission.csv`](submission.csv) | predictions for all 1,100 test athletes |
+| [`readme.txt`](readme.txt) | judge-facing guide: run steps, verification, disclosures |
+
+**Code**
+
 | | |
 |---|---|
 | [`predict.py`](predict.py) | inference: raw CSVs → `submission.csv` |
 | [`models/`](models/) | persisted models + `manifest.json` (features, weights, threshold, versions) |
-| [`src/score.py`](src/score.py) | the official metric, implemented verbatim |
+| [`src/score.py`](src/score.py) | the official metric, implemented verbatim + self-check |
 | [`src/features.py`](src/features.py) | feature engineering + leakage guard |
-| [`src/rethreshold.py`](src/rethreshold.py) | threshold selection against that metric |
+| [`src/threshold_sweep.py`](src/threshold_sweep.py) | the 102-threshold sweep and weighting sensitivity |
+| [`src/rethreshold.py`](src/rethreshold.py) | threshold selection against the metric |
+| [`src/generator_ceiling.py`](src/generator_ceiling.py) | model-free Bayes ceiling from the generator |
+| [`src/build_final_models.py`](src/build_final_models.py) | refit on all data, persist artifacts |
+
+**Write-ups**
+
+| | |
+|---|---|
 | [`RUNME.md`](RUNME.md) | how to run everything |
-| [`RESULTS.md`](RESULTS.md) | full tables, per-model breakdown, benchmark |
+| [`RESULTS.md`](RESULTS.md) | full tables, per-model breakdown, SOTA benchmark |
 | [`docs/findings.md`](docs/findings.md) | numbered findings, incl. negative results |
 | [`docs/methodology.md`](docs/methodology.md) | **the long-form explanation of every decision** |
 | [`docs/problem_statement.md`](docs/problem_statement.md) | the brief and the metric, transcribed |
+| [`reports/threshold_sweep.csv`](reports/threshold_sweep.csv) | raw 102-row sweep, every column |
 
 Full retraining pipeline and checks: see [RUNME.md](RUNME.md).
 
