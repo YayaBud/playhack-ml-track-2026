@@ -1,9 +1,21 @@
-pandas
-numpy
-scikit-learn
-scipy
-lightgbm
-xgboost
-catboost
-pyarrow
-matplotlib
+# Core runtime: everything predict.py and the training pipeline need.
+# Versions pinned to what models/*.joblib were pickled under -- joblib artifacts
+# are not guaranteed loadable across major versions of the estimator libraries.
+pandas==2.3.3
+numpy==2.5.2
+scikit-learn==1.9.0
+scipy==1.18.1
+lightgbm==4.7.0
+xgboost==3.4.1
+catboost==1.2.10
+pyarrow==24.0.0
+joblib==1.5.3
+
+# Figures for the EDA / report scripts (src/eda.py, src/report.py)
+matplotlib==3.11.1
+
+# Optional, not needed to reproduce submission.csv:
+#   optuna==4.9.0            hyperparameter search      (src/tune.py)
+#   autogluon.tabular==1.6.1 SOTA AutoML benchmark      (src/bench_autogluon.py)
+#   tabpfn==8.4.0            foundation-model benchmark (src/bench_tabpfn.py)
+# autogluon additionally pulls in torch (~2.5 GB); install only to rerun benchmarks.

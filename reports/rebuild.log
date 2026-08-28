@@ -1,0 +1,147 @@
+################ 1/6 features.py ################
+  [leak-check] train: sources clipped to 2026-01-05..2026-02-03
+  [train] +daily_features       -> 94 cols
+  [train] +sleep_features       -> 121 cols
+  [train] +weight_features      -> 128 cols
+  [train] +session_features     -> 155 cols
+D:\iit_guwahati_ai_hack\src\features.py:212: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  hr = hr[(hr["dt"] >= OBS_START) & (hr["dt"] < OBS_END + pd.Timedelta(days=1))]
+D:\iit_guwahati_ai_hack\src\features.py:237: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  ints = ints[(ints["dt"] >= OBS_START) & (ints["dt"] < OBS_END + pd.Timedelta(days=1))]
+D:\iit_guwahati_ai_hack\src\features.py:247: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  steps = steps[(steps["dt"] >= OBS_START) & (steps["dt"] < OBS_END + pd.Timedelta(days=1))]
+  [train] +hourly_features      -> 217 cols
+train: (3000, 223)
+  [leak-check] test: sources clipped to 2026-01-05..2026-02-03
+  [test] +daily_features       -> 94 cols
+  [test] +sleep_features       -> 121 cols
+  [test] +weight_features      -> 128 cols
+  [test] +session_features     -> 155 cols
+D:\iit_guwahati_ai_hack\src\features.py:212: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  hr = hr[(hr["dt"] >= OBS_START) & (hr["dt"] < OBS_END + pd.Timedelta(days=1))]
+D:\iit_guwahati_ai_hack\src\features.py:237: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  ints = ints[(ints["dt"] >= OBS_START) & (ints["dt"] < OBS_END + pd.Timedelta(days=1))]
+D:\iit_guwahati_ai_hack\src\features.py:247: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`).Please use a specific unit instead.
+  steps = steps[(steps["dt"] >= OBS_START) & (steps["dt"] < OBS_END + pd.Timedelta(days=1))]
+  [test] +hourly_features      -> 217 cols
+test: (1100, 223)
+################ 2/6 final.py ################
+matrix (3000, 206)  test (1100, 206)  positives 1050
+
+=== injured_in_risk_window (k=35) ===
+  lgb : AUC 0.76087
+  xgb : AUC 0.76229
+  cat : AUC 0.75907
+  BLEND: AUC 0.76246  {'lgb': 0.03982890393279444, 'xgb': 0.8262620106859025, 'cat': 0.13390908538130314}
+  CEILING: AUC 0.77023   F1 0.63852
+  MODEL  : AUC 0.76246   F1 0.63516 @thr 0.375
+
+=== onset_day_offset (k=35, n=1050) ===
+  lgb : MAE 2.6391
+  xgb : MAE 2.6393
+  cat : MAE 2.6782
+  BLEND  : MAE 2.6341   {'lgb': 0.5948601924352453, 'xgb': 0.4051311672604833, 'cat': 8.640304271370022e-06}
+  CEILING: MAE 2.5533   (constant-median baseline 7.6086)
+
+=== recovery_duration (k=20, n=1050) ===
+  lgb : MAE 2.9313
+  xgb : MAE 2.9570
+  cat : MAE 2.9154
+  BLEND  : MAE 2.9147   {'lgb': 0.23415629461691426, 'xgb': 2.7096343299683768e-05, 'cat': 0.7658166090397861}
+  CEILING: MAE 2.8219   (constant-median baseline 3.2333)
+
+  threshold: OOF-tuned raw 0.375 would fire on 0.2791 of test; calibrated cut 0.345 fires on 0.2400 (test E[rate] 0.3856)
+
+==============================================================
+  HEAD                      MODEL     CEILING   BASELINE   % of gap
+==============================================================
+  injured (AUC)            0.7625    0.7702    0.5000      97.1%
+  onset day offset        2.6341    2.5533    7.6086      98.4%
+  recovery duration       2.9147    2.8219    3.2333      77.5%
+==============================================================
+wrote submission.csv + reports/metrics.json
+################ 3/6 recovery_v2.py ################
+=== recomputing tree OOF for recovery_duration (k=20) ===
+  lgb : MAE 2.9313
+  xgb : MAE 2.9570
+  cat : MAE 2.9154
+
+=== cross-fitted sport+gender group median ===
+  grp : MAE 2.8981
+
+  BLEND (+grp): MAE 2.8926  weights {'lgb': np.float64(0.20438622062618142), 'xgb': np.float64(4.847025436476433e-07), 'cat': np.float64(0.2161968593468039), 'grp': np.float64(0.5794164353244711)}
+
+recovery_duration: 2.9147 -> 2.8926  (ceiling 2.8543)
+wrote reports/metrics.json + submission.csv
+################ 4/6 build_final_models.py ################
+=== classifier ===
+  [clf] selected 35 features
+    lgb w=0.040 -> clf_lgb.joblib
+    xgb w=0.826 -> clf_xgb.joblib
+    cat w=0.134 -> clf_cat.joblib
+=== onset_day_offset ===
+  [onset] selected 35 features
+    lgb w=0.595 -> onset_lgb.joblib
+    xgb w=0.405 -> onset_xgb.joblib
+    cat w=0.000 -> onset_cat.joblib
+=== recovery_duration ===
+  [recovery] selected 20 features
+    lgb w=0.204 -> recovery_lgb.joblib
+    cat w=0.216 -> recovery_cat.joblib
+    grp w=0.579 -> recovery_grp.joblib
+
+wrote 9 artifacts + manifest.json (2.1 MB)
+################ 5/6 rethreshold.py ################
+Baselines (PDF: training-set MEAN): onset 7.6148  recovery 3.2416
+PENALTY = 30
+
+  thr   posrate  recall     F1    skill_on  skill_rc   mean3
+  0.00   1.0000  1.0000  0.5185   0.6541    0.1075   0.4267
+  0.05   0.9920  1.0000  0.5216   0.6541    0.1075   0.4277
+  0.10   0.9490  0.9790  0.5276   0.5833    0.0000   0.3703
+  0.15   0.7783  0.8829  0.5477   0.2583    0.0000   0.2687
+  0.20   0.5750  0.7581  0.5737   0.0000    0.0000   0.1912
+  0.25   0.4183  0.6619  0.6030   0.0000    0.0000   0.2010
+  0.30   0.3117  0.5790  0.6126   0.0000    0.0000   0.2042
+  0.35   0.2490  0.5400  0.6311   0.0000    0.0000   0.2104
+  0.40   0.2163  0.5124  0.6333   0.0000    0.0000   0.2111
+  0.45   0.1940  0.4924  0.6336   0.0000    0.0000   0.2112
+  0.50   0.1847  0.4800  0.6284   0.0000    0.0000   0.2095
+  0.55   0.1787  0.4752  0.6293   0.0000    0.0000   0.2098
+  0.60   0.1743  0.4695  0.6268   0.0000    0.0000   0.2089
+  0.65   0.1710  0.4610  0.6193   0.0000    0.0000   0.2064
+  0.70   0.1680  0.4562  0.6165   0.0000    0.0000   0.2055
+  0.75   0.1633  0.4457  0.6078   0.0000    0.0000   0.2026
+  0.80   0.1573  0.4324  0.5966   0.0000    0.0000   0.1989
+  0.85   0.1497  0.4152  0.5817   0.0000    0.0000   0.1939
+  0.90   0.1377  0.3848  0.5523   0.0000    0.0000   0.1841
+  0.95   0.1233  0.3495  0.5169   0.0000    0.0000   0.1723
+
+lowest OOF score among truly-injured athletes : 0.0679
+max exclusion keeping OOF recall 1.0          : 0.0127
+all-ones baseline: F1 0.5185  skill_on 0.6541  skill_rc 0.1075  mean3 0.4267
+
+chosen exclusion 0.0063 (50% of the safe ceiling, capped at 2%)
+  OOF: thr 0.0456  posrate 0.9937  recall 1.0000  F1 0.5210  skill_on 0.6541  skill_rc 0.1075  mean3 0.4275
+  gain over all-ones: F1 +0.0024  mean3 +0.0008
+
+sensitivity (Task A weight w, score = w*F1 + (1-w)*mean(skills)):
+   w     F1-optimal thr 0.38      our choice      winner
+  0.25        0.1587              0.4159          ours
+  0.50        0.3173              0.4509          ours
+  0.75        0.4760              0.4859          ours
+  0.80        0.5077              0.4929          F1-threshold
+  0.90        0.5712              0.5069          F1-threshold
+
+test: thr 0.0454  positive rate 0.9936  (excluded 7 of 1100)
+
+wrote submission.csv + reports/metrics.json + models/manifest.json
+################ 6/6 validate ################
+submission.csv  rows=1100  cols=['athlete_id', 'injured_in_risk_window', 'onset_day_offset', 'recovery_duration']
+  injured_in_risk_window   min=  0  max=  1  mean=0.994   (train range 0..1)
+  onset_day_offset         min=  1  max= 27  mean=19.331   (train range 1..30)
+  recovery_duration        min=  8  max= 15  mean=11.531   (train range 5..20)
+  predicted positive rate 0.9936  (train 0.3500)
+
+OK - submission matches sample_submission contract
+################ REBUILD COMPLETE ################

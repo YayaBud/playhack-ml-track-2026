@@ -1,0 +1,16 @@
+{
+  "oracle_official_threshold": 0.014921465968586387,
+  "oracle_official_f1": 0.5245661213268196,
+  "oracle_official_skill_onset": 0.6646504425356539,
+  "oracle_official_skill_recovery": 0.13292343131146767,
+  "oracle_official_mean_of_three": 0.440713331724647,
+  "oracle_official_recall": 0.9999896399935887,
+  "oracle_f1_optimal_threshold": 0.3183246073298429,
+  "oracle_f1_at_f1_optimum": 0.6385225140461008,
+  "oracle_skill_onset_at_f1_optimum": 0.0,
+  "oracle_skill_recovery_at_f1_optimum": 0.0,
+  "mae_onset_baseline": 7.614793650793652,
+  "mae_recovery_baseline": 3.241648979591837,
+  "oracle_irreducible_mae_onset": 2.5533333333333332,
+  "oracle_irreducible_mae_recovery": 2.8104761904761904
+}

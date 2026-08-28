@@ -1,0 +1,24 @@
+{
+  "generator_ramp_feature": "steps_acwr",
+  "bayes_auc": 0.7813709124825212,
+  "bayes_mae_onset": 2.8285714285714287,
+  "bayes_mae_recovery": 2.893809523809524,
+  "baseline_mae_onset": 7.614793650793652,
+  "baseline_mae_recovery": 3.241648979591837,
+  "bayes_f1_optimal": 0.63039135581328,
+  "bayes_metric_optimal": {
+    "threshold": 0.0,
+    "flagged": 0.9903333333333333,
+    "recall": 1.0,
+    "f1": 0.5226142045025506,
+    "skill_onset": 0.6285426029533157,
+    "skill_recovery": 0.10730324534586433,
+    "mean_of_three": 0.4194866842672435
+  },
+  "bayes_flag_everyone": {
+    "f1": 0.5188729239341948,
+    "skill_onset": 0.6285426029533157,
+    "skill_recovery": 0.10730324534586433,
+    "mean_of_three": 0.4182395907444583
+  }
+}

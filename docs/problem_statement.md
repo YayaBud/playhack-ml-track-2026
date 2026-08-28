@@ -25,12 +25,42 @@ Shortlisted teams build a functional prototype and present/demo live to
 judges. Evaluated on implementation, functionality, innovation, feasibility,
 overall impact.
 
-## No metric is published anywhere on the page/API/FAQ
+## The official metric (problem-statement PDF, page 6)
 
-Checked: main page body, AMP version, `/api/public/competition/1739468`
-JSON (rounds[].details, evaluation_fields), `/api/public/1739468/get-opp-faq-sections`
-(empty). Organizers do not state ROC-AUC / MAE / F1 / any formula. The scored
-targets are only inferable from `sample_submission.csv`'s columns.
+Reached via the **Brief / Case** button on the Unstop page:
+https://d8it4huxumps7.cloudfront.net/uploads/submissions_case/6a8b41d2be715_playhack_ml_ps.pdf
+
+> **Task A: F1 score** — "F1-score, in [0, 1]. Measures whether an injury onset
+> occurs during the risk window."
+>
+> **Task B: timing** — "Evaluated on every test athlete truly injured in the risk
+> window. Score `onset_day_offset` and `recovery_duration`."
+>
+> **Hit: injured** — "Mean absolute error (MAE) is calculated against the true
+> `onset_day_offset` and `recovery_duration`."
+>
+> **Miss: not injured** — "A fixed penalty of PENALTY = n_risk = 30 applies to
+> both timing predictions when an injury is missed."
+>
+> **Skill score** — `skill = max(0, 1 - MAE_model / MAE_baseline)`
+>
+> **Baseline** — "Predicts the training-set mean onset day and recovery duration
+> for every injured athlete."
+
+The PDF does **not** state how Task A and Task B combine into a final ranking.
+`src/score.py` implements the above verbatim; `docs/findings.md` §8 works through
+what the penalty asymmetry implies for the decision threshold.
+
+Also from the PDF (page 3), a hard submission rule:
+
+> "`onset_day_offset` and `recovery_duration` are required for every athlete in
+> `sample_submission.csv`, even when `injured_in_risk_window` is predicted as 0."
+
+*Correction:* an earlier revision of this file claimed no metric was published
+anywhere. That was wrong — it was checking the Unstop page body, AMP mirror and
+public JSON APIs, none of which expose the PDF behind the Brief/Case button. Every
+threshold in this repo before that discovery was tuned for F1 alone, which scores
+0.000 on both Task B components.
 
 ## Design insight: train=60 days, test=30 days -> risk window is days 31-60
 

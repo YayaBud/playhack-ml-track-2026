@@ -1,0 +1,194 @@
+{
+  "heads": {
+    "clf": {
+      "features": [
+        "steps_acwr",
+        "cal_acwr",
+        "dist_acwr",
+        "load_last7",
+        "intens_acwr",
+        "resthr_acwr",
+        "hr_acwr",
+        "position",
+        "hrmax_acwr",
+        "mean_start_hour",
+        "load_max",
+        "resthr_slope",
+        "resthr_std",
+        "sleep_slope",
+        "hr_std",
+        "hrrange_mean",
+        "sleep_delta_last_first",
+        "bmi_baseline",
+        "sleep_std",
+        "intens_last7",
+        "sleepeff_acwr",
+        "sleepeff_last14",
+        "height_cm",
+        "hrrange_last7",
+        "sleepeff_last7",
+        "weight_kg_baseline",
+        "actmin_slope",
+        "sleep_acwr",
+        "sleepeff_max",
+        "sesh_acwr",
+        "sesh_slope",
+        "sleepeff_mean",
+        "intens_std",
+        "hrrange_max",
+        "std_start_hour"
+      ],
+      "weights": {
+        "lgb": 0.03982890393279444,
+        "xgb": 0.8262620106859025,
+        "cat": 0.13390908538130314
+      }
+    },
+    "onset": {
+      "features": [
+        "load_max",
+        "intens_last14",
+        "steps_acwr",
+        "hr_within_day_std",
+        "hrmax_std",
+        "load_last14",
+        "intens_last7",
+        "hrmax_max",
+        "intens_max",
+        "hrmax_acwr",
+        "load_last7",
+        "intens_mean",
+        "hrmax_slope",
+        "sleepeff_max",
+        "vam_last14",
+        "intens_peak_hour_mean",
+        "std_start_hour",
+        "load_mean",
+        "sleepeff_mean",
+        "position",
+        "hrrange_delta_last_first",
+        "resthr_std",
+        "dist_cv",
+        "vam_delta_last_first",
+        "dist_monotony",
+        "hrrange_slope",
+        "height_cm",
+        "vam_strain",
+        "hrmax_cv",
+        "hr_slope",
+        "mean_start_hour",
+        "actmin_slope",
+        "hr_iqr",
+        "experience_ratio",
+        "weight_last"
+      ],
+      "weights": {
+        "lgb": 0.5948601924352453,
+        "xgb": 0.4051311672604833,
+        "cat": 8.640304271370022e-06
+      }
+    },
+    "recovery": {
+      "features": [
+        "position",
+        "sport",
+        "std_start_hour",
+        "sesh_acwr",
+        "height_cm",
+        "sleep_debt_mean",
+        "weight_last",
+        "sleepeff_max",
+        "hrrange_mean",
+        "hrrange_delta_last_first",
+        "sleepeff_slope",
+        "hrrange_acwr",
+        "hrrange_std",
+        "bmi_baseline",
+        "mean_start_hour",
+        "bmi_last",
+        "actmin_slope",
+        "frac_n_practice",
+        "experience_ratio",
+        "hrrange_max"
+      ],
+      "weights": {
+        "lgb": 0.20438622062618142,
+        "cat": 0.2161968593468039,
+        "grp": 0.5794164353244711
+      }
+    }
+  },
+  "cat_cols": [
+    "sport",
+    "gender",
+    "dominant_side",
+    "position"
+  ],
+  "cat_levels": {
+    "sport": [
+      "Athletics",
+      "Badminton",
+      "Basketball",
+      "Football",
+      "Tennis",
+      "Volleyball"
+    ],
+    "gender": [
+      "female",
+      "male"
+    ],
+    "dominant_side": [
+      "left",
+      "right"
+    ],
+    "position": [
+      "Blocker",
+      "Center",
+      "Defender",
+      "Distance",
+      "Doubles",
+      "Forward",
+      "Goalkeeper",
+      "Guard",
+      "Jumps",
+      "Libero",
+      "Midfielder",
+      "Setter",
+      "Singles",
+      "Spiker",
+      "Sprinter",
+      "Throws"
+    ]
+  },
+  "onset_range": [
+    1,
+    30
+  ],
+  "recovery_range": [
+    5,
+    20
+  ],
+  "group_keys": [
+    "sport",
+    "gender"
+  ],
+  "seed": 42,
+  "observation_window": [
+    "2026-01-05",
+    "2026-02-03"
+  ],
+  "threshold": {
+    "mode": "rank_quantile",
+    "exclusion_fraction": 0.006333333333333333
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.5.2",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.9.0",
+    "lightgbm": "4.7.0",
+    "xgboost": "3.3.0",
+    "catboost": "1.2.10",
+    "joblib": "1.5.3"
+  }
+}

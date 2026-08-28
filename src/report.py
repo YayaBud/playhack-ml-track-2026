@@ -1,11 +1,9 @@
 """
-Render reports/metrics.json into RESULTS.md - the model-vs-ceiling scoreboard.
+Render reports/metrics.json into RESULTS.md.
 
-Every head is reported against two reference points rather than in isolation:
-  BASELINE  what you get for free (random ranking; the constant median)
-  CEILING   the Bayes-optimal value given that the labels are stochastic
-and then "% of gap closed" = (model - baseline) / (ceiling - baseline), which
-is the number that actually says whether more modelling effort is worth it.
+Leads with the organisers' actual scoring rule (Task A F1 + the two Task B skill
+scores, src/score.py). ROC-AUC and the MAE ceilings follow as diagnostics -- they
+are how we judged the ranking while building, but they are not scored.
 """
 from __future__ import annotations
 
@@ -16,138 +14,150 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "reports"
 
 
-def pct(model, base, ceil):
-    if abs(ceil - base) < 1e-12:
-        return float("nan")
-    return (model - base) / (ceil - base) * 100
+def pct(model, ceiling):
+    return float("nan") if not ceiling else 100 * model / ceiling
 
 
 def main():
     M = json.loads((REPORTS / "metrics.json").read_text())
     L = []
-    L.append("# Results")
-    L.append("")
-    L.append("Out-of-fold, 3-seed repeated 5-fold CV, features selected inside each")
-    L.append("fold. `submission.csv` is produced by the same run.")
-    L.append("")
-    L.append("## Model vs Bayes ceiling")
-    L.append("")
-    L.append("| head | metric | baseline | **model** | ceiling | gap closed |")
-    L.append("|---|---|---|---|---|---|")
+    A = L.append
 
-    a_m, a_c = M.get("auc_blend_final", M["auc_blend"]), M["oracle_auc"]
-    L.append("| `injured_in_risk_window` | ROC-AUC | 0.5000 | **"
-             + format(a_m, ".4f") + "** | " + format(a_c, ".4f") + " | "
-             + format(pct(a_m, 0.5, a_c), ".1f") + "% |")
-    f_m, f_c = M["f1"], M["oracle_f1"]
-    L.append("| `injured_in_risk_window` | F1 | - | **" + format(f_m, ".4f")
-             + "** | " + format(f_c, ".4f") + " | "
-             + format(f_m / f_c * 100, ".1f") + "% of ceiling |")
+    A("# Results")
+    A("")
+    A("Out-of-fold over 3000 training athletes, 3 seeds x 5 folds, with feature")
+    A("selection performed inside each fold. `submission.csv` comes from the same")
+    A("models refit on all training data (`src/build_final_models.py`).")
+    A("")
 
-    for t in ["onset_day_offset", "recovery_duration"]:
-        b = M["constant_mae_" + t]
-        c = M["oracle_mae_" + t]
-        m = M.get("mae_" + t + "_final", M["mae_" + t])
-        L.append("| `" + t + "` | MAE | " + format(b, ".4f") + " | **"
-                 + format(m, ".4f") + "** | " + format(c, ".4f") + " | "
-                 + format(pct(m, b, c), ".1f") + "% |")
-    L.append("")
+    # ------------------------------------------------------------- official ---
+    A("## Scored metric (problem statement, page 6)")
+    A("")
+    A("`skill = max(0, 1 - MAE_model / MAE_baseline)`, where a **missed** injury")
+    A("contributes a flat `PENALTY = 30` to both timing heads, and the baseline")
+    A("predicts the training-set mean for every injured athlete. Task B is")
+    A("evaluated over the truly-injured athletes only. See `src/score.py`.")
+    A("")
+    A("| | scored quantity | **ours** | ceiling | closed |")
+    A("|---|---|---|---|---|")
+    rows = [
+        ("**Task A**", "F1", "official_f1", "oracle_official_f1"),
+        ("**Task B**", "skill — `onset_day_offset`", "official_skill_onset",
+         "oracle_official_skill_onset"),
+        ("**Task B**", "skill — `recovery_duration`", "official_skill_recovery",
+         "oracle_official_skill_recovery"),
+        ("", "balanced mean of the three", "official_mean_of_three",
+         "oracle_official_mean_of_three"),
+    ]
+    for task, name, mk, ck in rows:
+        if mk in M and ck in M:
+            A("| %s | %s | **%.4f** | %.4f | %.1f%% |" % (
+                task, name, M[mk], M[ck], pct(M[mk], M[ck])))
+    A("")
+    if "official_mae_onset_model" in M:
+        A("Underlying errors: onset MAE **%.4f** against a %.4f baseline; recovery"
+          % (M["official_mae_onset_model"], M["official_mae_onset_baseline"]))
+        A("MAE **%.4f** against %.4f. OOF recall on injured athletes: **%.4f**."
+          % (M["official_mae_recovery_model"], M["official_mae_recovery_baseline"],
+             M["official_oof_recall"]))
+        A("")
+
+    # ------------------------------------------------------------ threshold ---
+    if "f1_optimal_threshold_would_score" in M:
+        f = M["f1_optimal_threshold_would_score"]
+        A("### Why the threshold sits so low")
+        A("")
+        A("A miss costs 30 against baselines of ~7.6 and ~3.2, so break-even recall")
+        A("is 0.82 (onset) and 0.99 (recovery). Tuning for F1 alone clears neither:")
+        A("")
+        A("| threshold | F1 | skill_onset | skill_recovery | mean |")
+        A("|---|---|---|---|---|")
+        A("| %.2f — F1-optimal | **%.4f** | %.4f | %.4f | %.4f |" % (
+            f["threshold"], f["f1"], f["skill_onset"], f["skill_recovery"],
+            (f["f1"] + f["skill_onset"] + f["skill_recovery"]) / 3))
+        A("| %.3f — **shipped** | %.4f | **%.4f** | **%.4f** | **%.4f** |" % (
+            M.get("threshold_test", 0), M["official_f1"], M["official_skill_onset"],
+            M["official_skill_recovery"], M["official_mean_of_three"]))
+        A("")
+        A("The shipped rule flags every athlete except the most confidently healthy")
+        A("%.2f%% (half the maximum exclusion that still holds OOF recall at 1.0)."
+          % (100 * M.get("official_exclusion_fraction", 0)))
+        A("Test positive rate %.4f. A perfectly-calibrated oracle makes the same"
+          % M.get("test_positive_rate", float("nan")))
+        A("trade, so this is the optimal play under the rule, not a quirk of our model.")
+        A("")
+
+    # ----------------------------------------------------------- diagnostic ---
+    A("## Diagnostics (not scored)")
+    A("")
+    A("| head | metric | model | ceiling | closed |")
+    A("|---|---|---|---|---|")
+    if "auc_blend" in M:
+        A("| `injured_in_risk_window` | ROC-AUC | %.4f | %.4f | %.1f%% |" % (
+            M["auc_blend"], M["oracle_auc"],
+            100 * (M["auc_blend"] - 0.5) / (M["oracle_auc"] - 0.5)))
+    for t, label in [("onset_day_offset", "`onset_day_offset`"),
+                     ("recovery_duration", "`recovery_duration`")]:
+        mk, bk, ck = "mae_" + t, "constant_mae_" + t, "oracle_mae_" + t
+        if mk in M and ck in M:
+            A("| %s | MAE (hits only) | %.4f | %.4f | %.1f%% |" % (
+                label, M[mk], M[ck],
+                100 * (M[bk] - M[mk]) / (M[bk] - M[ck])))
+    A("")
+    A("> A ceiling is an **estimate** of irreducible error, not a proven bound. It")
+    A("> must condition on at least as much information as the model it bounds -- an")
+    A("> earlier estimate built on a single recovered feature put this model at 113%")
+    A("> of \"maximum\", which signalled a bad estimate rather than a good model.")
+    A("> `src/official_ceiling.py` now warns whenever a score exceeds its ceiling.")
+    A("")
+
+    # ---------------------------------------------------------- per-model ----
+    A("## Per-model out-of-fold scores")
+    A("")
+    A("| head | LightGBM | XGBoost | CatBoost | group median | blend |")
+    A("|---|---|---|---|---|---|")
+    if "auc_lgb" in M:
+        A("| `injured_in_risk_window` (AUC) | %.4f | %.4f | %.4f | - | **%.4f** |" % (
+            M["auc_lgb"], M["auc_xgb"], M["auc_cat"], M["auc_blend"]))
+    for t, label in [("onset_day_offset", "`onset_day_offset` (MAE)"),
+                     ("recovery_duration", "`recovery_duration` (MAE)")]:
+        if "mae_" + t + "_lgb" in M:
+            grp = ("%.4f" % M["mae_" + t + "_grp"]) if "mae_" + t + "_grp" in M else "-"
+            A("| %s | %.4f | %.4f | %.4f | %s | **%.4f** |" % (
+                label, M["mae_" + t + "_lgb"], M["mae_" + t + "_xgb"],
+                M["mae_" + t + "_cat"], grp, M["mae_" + t]))
+    A("")
+    A("`recovery_duration` carries a fourth candidate: a cross-fitted sport+gender")
+    A("median. It beats all three tree models on its own and takes the largest")
+    A("share of the blend -- recovery has little per-athlete signal beyond sport.")
+    A("")
+    for key, label in [("blend_weights_clf", "classifier"),
+                       ("blend_weights_onset_day_offset", "`onset_day_offset`"),
+                       ("blend_weights_recovery_duration", "`recovery_duration`")]:
+        if key in M:
+            A("- %s: %s" % (label, json.dumps(
+                {k: round(v, 3) for k, v in M[key].items()})))
+    A("")
+
+    # ----------------------------------------------------------- benchmark ---
     if "ag_auc" in M:
-        L.append("## SOTA benchmark: ours vs AutoGluon (best_quality)")
-        L.append("")
-        L.append("Same features (`src/features.py`), same train/test split.")
-        L.append("AutoGluon 1.6.1, `presets=\"best_quality\"`, 300s/head, 5-fold")
-        L.append("internal bagging -- a standard, widely-cited AutoML SOTA")
-        L.append("reference (stacked LightGBM/XGBoost/CatBoost/RF/ExtraTrees/NN/KNN,")
-        L.append("weighted-ensembled). TabPFN (pretrained tabular transformer,")
-        L.append("also SOTA for this data regime) was blocked by a one-time")
-        L.append("license click-through its pip package now requires -- not")
-        L.append("something completable headlessly; see `src/bench_tabpfn.py`.")
-        L.append("")
-        L.append("| head | metric | ours (solo) | AutoGluon (solo) | **final (best/blend)** |")
-        L.append("|---|---|---|---|---|")
-        src = M["auc_source"]
-        if src.startswith("blend"):
-            src = "blend, 95% AG"
-        L.append("| `injured_in_risk_window` | AUC | " + format(M["auc_blend"], ".4f")
-                 + " | " + format(M["ag_auc"], ".4f") + " | **"
-                 + format(M["auc_blend_final"], ".4f") + "** (" + src + ") |")
-        L.append("| `onset_day_offset` | MAE | " + format(M["mae_onset_day_offset"], ".4f")
-                 + " | " + format(M["ag_mae_onset_day_offset"], ".4f") + " | **"
-                 + format(M["mae_onset_day_offset_final"], ".4f") + "** ("
-                 + M["onset_source"] + ") |")
-        L.append("| `recovery_duration` | MAE | " + format(M["mae_recovery_duration"], ".4f")
-                 + " | " + format(M["ag_mae_recovery_duration"], ".4f") + " | **"
-                 + format(M["mae_recovery_duration_final"], ".4f") + "** ("
-                 + M["recovery_source"] + ") |")
-        L.append("")
-        L.append("AutoGluon wins classifier and recovery outright; our L1-objective,")
-        L.append("in-fold-selected regressor wins onset outright, but a 78/22 blend")
-        L.append("with AutoGluon's onset model still edges out both solo scores --")
-        L.append("the two approaches make different enough errors that averaging")
-        L.append("them helps. `submission.csv` ships the best/blended choice per head.")
-        L.append("")
-    L.append("Baselines: random ranking for AUC, constant-median prediction for MAE.")
-    L.append("Ceilings: analytic expected AUC of the Bayes ranking; conditional")
-    L.append("mean-absolute-deviation for the MAE heads. Lower MAE is better, so")
-    L.append("\"gap closed\" moves from the constant baseline down toward the ceiling.")
-    L.append("")
-
-    L.append("## Per-model out-of-fold scores")
-    L.append("")
-    L.append("| head | LightGBM | XGBoost | CatBoost | sport+gender median | blend |")
-    L.append("|---|---|---|---|---|---|")
-    L.append("| `injured_in_risk_window` (AUC) | " + format(M["auc_lgb"], ".4f")
-             + " | " + format(M["auc_xgb"], ".4f") + " | " + format(M["auc_cat"], ".4f")
-             + " | - | **" + format(M["auc_blend"], ".4f") + "** |")
-    for t in ["onset_day_offset", "recovery_duration"]:
-        grp = M.get("mae_" + t + "_grp")
-        grp_s = format(grp, ".4f") if grp is not None else "-"
-        L.append("| `" + t + "` (MAE) | "
-                 + format(M["mae_" + t + "_lgb"], ".4f") + " | "
-                 + format(M["mae_" + t + "_xgb"], ".4f") + " | "
-                 + format(M["mae_" + t + "_cat"], ".4f") + " | " + grp_s + " | **"
-                 + format(M["mae_" + t], ".4f") + "** |")
-    L.append("")
-    L.append("`recovery_duration` folds in a 4th candidate: a cross-fitted")
-    L.append("sport+gender group median. It beats all three tree models")
-    L.append("individually (2.898 vs 2.928-2.948) and takes 62% of the blend")
-    L.append("weight -- confirming the finding in docs/findings.md that")
-    L.append("recovery has almost no per-athlete signal beyond sport identity.")
-    L.append("")
-    L.append("Blend weights: classifier " + json.dumps(
-        {k: round(v, 3) for k, v in M["blend_weights_clf"].items()}))
-    for t in ["onset_day_offset", "recovery_duration"]:
-        L.append("- `" + t + "`: " + json.dumps(
-            {k: round(v, 3) for k, v in M["blend_weights_" + t].items()}))
-    L.append("")
-    L.append("## Submission")
-    L.append("")
-    L.append("- decision threshold " + format(M.get("test_threshold_calibrated",
-             M["best_threshold"]), ".3f") + " on isotonic-calibrated probabilities,"
-             + " chosen to maximise expected F1 on test's own calibrated scores")
-    L.append("- predicted positive rate " + format(M["test_positive_rate"], ".4f")
-             + " vs train " + format(M["train_positive_rate"], ".4f"))
-    if "test_expected_positive_rate" in M:
-        L.append("- test's calibrated probabilities average "
-                 + format(M["test_expected_positive_rate"], ".4f")
-                 + " (a prevalence estimate consistent with the analytic one below)"
-                 + " but are sharply bimodal: ~78% of athletes cluster at p~0.15-0.30"
-                 + " (background hazard) and ~23% at p>=0.65 (overload hazard), with"
-                 + " almost nothing in between. The F1-optimal threshold sits in that"
-                 + " gap and isolates the overload cluster -- matching the mean"
-                 + " (0.385) instead would flag every background-hazard athlete too"
-                 + " and tank precision for a small recall gain")
-        L.append("- overload prevalence is the real driver of the test/train gap:"
-                 + " 22.0% of test athletes sit above the overload ACWR threshold vs"
-                 + " 17.5% in train (rates conditional on overload/background are"
-                 + " ~0.93 / ~0.23 in both splits, so this is a covariate shift, not"
-                 + " a labelling shift) -- an independent analytic estimate from that"
-                 + " decomposition lands at 0.371-0.385 across four ACWR proxies,"
-                 + " matching the model's own calibrated mean")
-    L.append("- " + str(M["n_features"] if "n_features" in M else "206")
-             + " engineered features available; 35 / 35 / 20 selected per head")
-    L.append("")
+        A("## SOTA benchmark: AutoGluon")
+        A("")
+        A("AutoGluon 1.6.1 `best_quality` (stacked LightGBM/XGBoost/CatBoost/RF/")
+        A("ExtraTrees/NN/KNN), 300s per head, same features and split.")
+        A("")
+        A("| head | ours | AutoGluon |")
+        A("|---|---|---|")
+        A("| `injured_in_risk_window` (AUC) | %.4f | %.4f |" % (M["auc_blend"], M["ag_auc"]))
+        for t in ["onset_day_offset", "recovery_duration"]:
+            if "ag_mae_" + t in M:
+                A("| `%s` (MAE) | %.4f | %.4f |" % (t, M["mae_" + t], M["ag_mae_" + t]))
+        A("")
+        A("Competitive, and it won 2 of 3 heads on the AUC/MAE framing. Not shipped:")
+        A("its edge under the *scored* metric is ~0.008 skill, against a 274 MB")
+        A("artifact requiring a matching AutoGluon install. TabPFN was blocked by a")
+        A("one-time license click-through its package now requires.")
+        A("")
 
     (ROOT / "RESULTS.md").write_text("\n".join(L), encoding="utf-8")
     print("\n".join(L))
